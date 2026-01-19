@@ -47,7 +47,7 @@ class AutonomousDemo(hm.HelloNode):
 
         # TODO: fill in
         self.tag_reference_frames = {
-            "machine_pos": BASE,
+            "machine_po ": BASE,
             "wafer_table_pos": BASE,
             "dial_left": GRIP,
             "dial_right": GRIP,
@@ -87,8 +87,11 @@ class AutonomousDemo(hm.HelloNode):
 
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        self.get_logger().info("initializing TagHelper...")
         self.tag_helper = TagHelper(self.tf_buffer)
+        self.get_logger().info("TagHelper initialized! Starting GripperCamHelper...")
         self.gripper_cam_helper = GripperCamHelper(GRIPPER_TAGS_DIR)
+        self.get_logger().info("GripperCamHelper initialized!")
 
     def run_demo(self):
         """
