@@ -1,0 +1,31 @@
+tool_offsets:
+  # dial turn and button push protrusion relative
+  # to the center of the gripper's tips when closed
+  gripper_tool:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  
+  # vacuum pen cup relative to the center of the
+  # gripper tips when closed
+  vacuum_pen:
+    x: 0.0
+    y: &pen_y_offset 0.0
+    z: 0.0
+
+  # values used to adjust gripper position during rotation
+  # n: number of corrections per turn
+  # r: circle of rotation's radius
+  dial_rotation_values:
+    n: 16
+    r: *pen_y_offset 
+
+# offsets that define target points for operation
+# steps (e.g. x, y, z from the object's tag)
+position_offsets:
+  # starting_netural:
+  machine:
+  dial:
+  button:
+  wafer_table:
+  machine_tray:

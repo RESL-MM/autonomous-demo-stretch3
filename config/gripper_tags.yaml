@@ -1,0 +1,10 @@
+# measure aruco markers lenghts irl-- don't rely on the measurements
+# used to generate the tags; even fairly small differences can result
+# in noticable inaccuracies/systematic errors
+
+# e.g. tag entry
+# '200':
+#   length_mm: 14
+#   use_rgb_only: True
+#   name: 'finger_left'
+#   link: 'link_finger_left'
