@@ -309,7 +309,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
 
-    robot.lift.move_to(joint_state_center['lift_pos'])
+    robot.lift.move_to(1.0)
     robot.push_command()
     robot.wait_command()
 
@@ -415,15 +415,24 @@ def main(use_yolo, use_remote_computer, exposure):
                 color_image = np.asanyarray(color_frame.get_data())
                 image = np.copy(color_image)
 
-                if detect_aruco_toy_on:
-                    aruco_detector.update(color_image, camera_info)
-                    markers = aruco_detector.get_detected_marker_dict()
-                    fingertips = aruco_to_fingertips.get_fingertips(markers)
-                    for k in markers:
-                        m = markers[k]
-                        name = m['info']['name']
-                        if name == 'toy':
-                            toy_target = m['pos'] - (toy_depth_m/2.0 * m['z_axis'])
+                if detect_aruco_toy_on:                                                         
+                    aruco_detector.update(color_image, camera_info)                             
+                    markers = aruco_detector.get_detected_marker_dict()                         
+                    fingertips = aruco_to_fingertips.get_fingertips(markers)                    
+                                                                                                
+                    button_left_pos = None                                                      
+                    button_right_pos = None                                                     
+                    for k in markers:                                                           
+                        m = markers[k]                                                          
+                        name = m['info']['name']                                                
+                        if name == 'button_left':                                               
+                            button_left_pos = m['pos']                                          
+                        elif name == 'button_right':                                            
+                            button_right_pos = m['pos']                                         
+                                                                                                
+                    # Calculate midpoint if both markers detected                               
+                    if button_left_pos is not None and button_right_pos is not None:            
+                        toy_target = (button_left_pos + button_right_pos) / 2.0   
                     
             else:
                 timeout_for_socket_poll_int = regulate_socket_poll.get_poll_timeout()
@@ -690,7 +699,7 @@ def main(use_yolo, use_remote_computer, exposure):
 
 
                     if target_error < grasp_if_error_below_this:
-                        cmd['gripper_open'] = -gripper_close_speed
+                        cmd['gripper_open'] = 0.0
 
                         if ((not grasping_the_target) and
                             (joint_state['gripper_eff'] < successful_grasp_effort) and

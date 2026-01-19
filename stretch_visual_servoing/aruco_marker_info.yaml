@@ -16,10 +16,15 @@
   use_rgb_only: True
   name: 'finger_right'
   link: 'link_finger_right'
-'202':
-  length_mm: 30
+'5':
+  length_mm: 50
   use_rgb_only: True
-  name: 'toy'
+  name: 'button_left'
+  link: 'None'
+'4':
+  length_mm: 50
+  use_rgb_only: True
+  name: 'button_right'
   link: 'None'
 'default':
   length_mm: 24
