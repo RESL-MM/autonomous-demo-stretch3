@@ -65,6 +65,10 @@ print_timing = True
 stop_if_toy_not_detected_this_many_frames = 10 #4 #1
 stop_if_fingers_not_detected_this_many_frames = 10 #4 #1
 
+# Lock behavior parameters
+lock_wrist_rotation_rad = np.pi / 4  # 45 degrees counterclockwise
+lock_error_threshold = 0.25  # 25 cm - if we were this close before losing detection, proceed to lock
+
 max_retract_state_count = 60
 
 # Defines a deadzone for mobile base rotation, since low values can
@@ -362,6 +366,7 @@ def main(use_yolo, use_remote_computer, exposure):
         prev_behavior = 'reach'
         grasping_the_target = False
         pre_reach = True
+        last_target_error = None  # Track the last known target error before detection was lost
 
         # Assume that the gripper starts out fully opened
         distance_between_fingertips = distance_between_fully_open_fingertips
@@ -517,6 +522,7 @@ def main(use_yolo, use_remote_computer, exposure):
 
                 position_error = toy_target - between_fingertips
                 target_error = np.linalg.norm(position_error)
+                last_target_error = target_error  # Track for lock behavior
                 print('target_error = {:.2f} cm'.format(100.0 * target_error))
                 if target_error >  lost_ball_target_error_too_large:
                     if grasping_the_target: 
@@ -712,7 +718,7 @@ def main(use_yolo, use_remote_computer, exposure):
                     #     cmd['gripper_open'] = gripper_open_speed
 
                     if target_error < grasp_if_error_below_this:
-                        cmd = zero_val.copy()
+                        cmd = zero_vel.copy()
                     else:
                         cmd['gripper_open'] = 0.0
 
@@ -728,7 +734,15 @@ def main(use_yolo, use_remote_computer, exposure):
                     joint_state = controller.get_joint_state()
                     stop_joints = zero_vel.copy()
 
-                    if frames_since_toy_detected >= stop_if_toy_not_detected_this_many_frames:
+                    # Check if we should transition to lock behavior
+                    # If we lost detection but were close enough, proceed to lock the knob
+                    if (last_target_error is not None and
+                        last_target_error < lock_error_threshold and
+                        frames_since_toy_detected >= stop_if_toy_not_detected_this_many_frames):
+                        print('Target lost but was close enough - transitioning to LOCK behavior')
+                        behavior = 'lock'
+                        cmd = zero_vel.copy()
+                    elif frames_since_toy_detected >= stop_if_toy_not_detected_this_many_frames:
                         cmd = stop_joints
                         cmd['gripper_open'] = gripper_open_speed
                     elif frames_since_fingers_detected >= stop_if_fingers_not_detected_this_many_frames:
@@ -742,6 +756,38 @@ def main(use_yolo, use_remote_computer, exposure):
                         cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                         cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                         controller.set_command(cmd)
+
+            elif behavior == 'lock':
+                # Lock behavior: rotate wrist 45 degrees counterclockwise to lock the knob
+                if prev_behavior != 'lock':
+                    lock_state_count = 0
+                    lock_target_yaw = joint_state['wrist_yaw_pos'] + lock_wrist_rotation_rad
+                    lock_complete = False
+                    print(f'LOCK: Starting wrist rotation to {np.degrees(lock_target_yaw):.1f} degrees')
+                prev_behavior = behavior
+
+                with controller.lock:
+                    current_yaw = joint_state['wrist_yaw_pos']
+                    yaw_error = abs(lock_target_yaw - current_yaw)
+
+                    if yaw_error < 0.05:  # Within ~3 degrees tolerance
+                        lock_complete = True
+                        print('LOCK: Wrist rotation complete!')
+                    else:
+                        # Move wrist yaw to target position
+                        robot.end_of_arm.get_joint('wrist_yaw').move_to(lock_target_yaw, v_des=1.0, a_des=2.0)
+
+                    robot.push_command()
+
+                # After lock is complete or timeout, transition back to reach
+                if lock_complete or lock_state_count > 60:  # ~4 seconds timeout at 15Hz
+                    cmd = zero_vel.copy()
+                    behavior = 'reach'
+                    pre_reach = True
+                    last_target_error = None  # Reset for next reach attempt
+                    print('LOCK: Behavior complete, returning to reach')
+
+                lock_state_count = lock_state_count + 1
 
             if not use_yolo:
 
