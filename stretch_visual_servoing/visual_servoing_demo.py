@@ -119,7 +119,7 @@ max_toy_z_for_default_fingertips = 0.12
 ####################################
 ## Gains for Reach Behavior
 
-max_distance_for_attempted_reach = 0.5
+max_distance_for_attempted_reach = 1.0
 
 arm_retraction_speedup = 5.0
 
