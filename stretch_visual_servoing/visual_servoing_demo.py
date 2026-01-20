@@ -758,24 +758,24 @@ def main(use_yolo, use_remote_computer, exposure):
                         controller.set_command(cmd)
 
             elif behavior == 'lock':
-                # Lock behavior: rotate wrist 45 degrees counterclockwise to lock the knob
+                # Lock behavior: rotate wrist roll 45 degrees counterclockwise to lock the knob
                 if prev_behavior != 'lock':
                     lock_state_count = 0
-                    lock_target_yaw = joint_state['wrist_yaw_pos'] + lock_wrist_rotation_rad
+                    lock_target_roll = joint_state['wrist_roll_pos'] + lock_wrist_rotation_rad
                     lock_complete = False
-                    print(f'LOCK: Starting wrist rotation to {np.degrees(lock_target_yaw):.1f} degrees')
+                    print(f'LOCK: Starting wrist roll rotation to {np.degrees(lock_target_roll):.1f} degrees')
                 prev_behavior = behavior
 
                 with controller.lock:
-                    current_yaw = joint_state['wrist_yaw_pos']
-                    yaw_error = abs(lock_target_yaw - current_yaw)
+                    current_roll = joint_state['wrist_roll_pos']
+                    roll_error = abs(lock_target_roll - current_roll)
 
-                    if yaw_error < 0.05:  # Within ~3 degrees tolerance
+                    if roll_error < 0.05:  # Within ~3 degrees tolerance
                         lock_complete = True
-                        print('LOCK: Wrist rotation complete!')
+                        print('LOCK: Wrist roll rotation complete!')
                     else:
-                        # Move wrist yaw to target position
-                        robot.end_of_arm.get_joint('wrist_yaw').move_to(lock_target_yaw, v_des=1.0, a_des=2.0)
+                        # Move wrist roll to target position
+                        robot.end_of_arm.get_joint('wrist_roll').move_to(lock_target_roll, v_des=1.0, a_des=2.0)
 
                     robot.push_command()
 
