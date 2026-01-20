@@ -312,7 +312,11 @@ def recenter_robot(robot):
     robot.arm.move_to(joint_state_center['arm_pos'])
     robot.push_command()
     robot.wait_command()
-
+    
+    robot.end_of_arm.get_joint('wrist_roll').move_to(joint_state_center['wrist_roll_pos'])
+    robot.push_command()
+    robot.wait_command()
+    
     robot.lift.move_to(1.05)
     robot.push_command()
     robot.wait_command()
@@ -761,7 +765,7 @@ def main(use_yolo, use_remote_computer, exposure):
                 # Lock behavior: rotate wrist roll 45 degrees counterclockwise to lock the knob
                 if prev_behavior != 'lock':
                     lock_state_count = 0
-                    lock_target_roll = joint_state['wrist_roll_pos'] + lock_wrist_rotation_rad
+                    lock_target_roll = joint_state['wrist_roll_pos'] - lock_wrist_rotation_rad
                     lock_complete = False
                     print(f'LOCK: Starting wrist roll rotation to {np.degrees(lock_target_roll):.1f} degrees')
                 prev_behavior = behavior
