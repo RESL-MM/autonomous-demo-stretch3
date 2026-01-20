@@ -97,7 +97,7 @@ seconds_of_timing_history = 1
 toy_depth_m = 0.055
 toy_width_m = 0.0542
 
-grasp_if_error_below_this = 0.02
+grasp_if_error_below_this = 0.16
 
 # Find a way to make the gripper faster? These are the maximum
 # available velocities.
@@ -309,7 +309,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
 
-    robot.lift.move_to(1.0)
+    robot.lift.move_to(1.05)
     robot.push_command()
     robot.wait_command()
 
@@ -698,18 +698,23 @@ def main(use_yolo, use_remote_computer, exposure):
                     }
 
 
-                    if target_error < grasp_if_error_below_this:
-                        cmd['gripper_open'] = 0.0
+                    # if target_error < grasp_if_error_below_this:
+                    #     cmd['gripper_open'] = 0.0
 
-                        if ((not grasping_the_target) and
-                            (joint_state['gripper_eff'] < successful_grasp_effort) and
-                            (distance_between_fingertips < successful_grasp_max_fingertip_distance) and
-                            (distance_between_fingertips > successful_grasp_min_fingertip_distance)):
-                            print('I GOT THE BALL!!!')
-                            grasping_the_target = True
-                            behavior = 'retract'
+                    #     if ((not grasping_the_target) and
+                    #         (joint_state['gripper_eff'] < successful_grasp_effort) and
+                    #         (distance_between_fingertips < successful_grasp_max_fingertip_distance) and
+                    #         (distance_between_fingertips > successful_grasp_min_fingertip_distance)):
+                    #         print('I GOT THE BALL!!!')
+                    #         grasping_the_target = True
+                    #         behavior = 'retract'
+                    # else:
+                    #     cmd['gripper_open'] = gripper_open_speed
+
+                    if target_error < grasp_if_error_below_this:
+                        cmd = zero_val.copy()
                     else:
-                        cmd['gripper_open'] = gripper_open_speed
+                        cmd['gripper_open'] = 0.0
 
                     cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
                     cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
