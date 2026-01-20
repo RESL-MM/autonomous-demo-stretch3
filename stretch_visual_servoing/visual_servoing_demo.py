@@ -762,29 +762,51 @@ def main(use_yolo, use_remote_computer, exposure):
                         controller.set_command(cmd)
 
             elif behavior == 'lock':
-                # Lock behavior: rotate wrist roll 45 degrees counterclockwise to lock the knob
+                # Lock behavior: twist the knob
+                # Phase 1: rotate left 45 degrees
+                # Phase 2: wait 1 second
+                # Phase 3: rotate right 90 degrees
                 if prev_behavior != 'lock':
                     lock_state_count = 0
-                    lock_target_roll = joint_state['wrist_roll_pos'] - lock_wrist_rotation_rad
-                    lock_complete = False
-                    print(f'LOCK: Starting wrist roll rotation to {np.degrees(lock_target_roll):.1f} degrees')
+                    lock_phase = 'left'
+                    lock_initial_roll = joint_state['wrist_roll_pos']
+                    lock_target_roll = lock_initial_roll - lock_wrist_rotation_rad  # Left 45 degrees
+                    lock_wait_start = None
+                    print(f'LOCK: Phase 1 - Rotating left to {np.degrees(lock_target_roll):.1f} degrees')
                 prev_behavior = behavior
 
                 with controller.lock:
                     current_roll = joint_state['wrist_roll_pos']
-                    roll_error = abs(lock_target_roll - current_roll)
 
-                    if roll_error < 0.05:  # Within ~3 degrees tolerance
-                        lock_complete = True
-                        print('LOCK: Wrist roll rotation complete!')
-                    else:
-                        # Move wrist roll to target position
-                        robot.end_of_arm.get_joint('wrist_roll').move_to(lock_target_roll, v_des=1.0, a_des=2.0)
+                    if lock_phase == 'left':
+                        roll_error = abs(lock_target_roll - current_roll)
+                        if roll_error < 0.05:  # Within ~3 degrees tolerance
+                            lock_phase = 'wait'
+                            lock_wait_start = time.time()
+                            print('LOCK: Phase 2 - Waiting 1 second')
+                        else:
+                            robot.end_of_arm.get_joint('wrist_roll').move_to(lock_target_roll, v_des=1.0, a_des=2.0)
+
+                    elif lock_phase == 'wait':
+                        if time.time() - lock_wait_start >= 1.0:
+                            lock_phase = 'right'
+                            # Right 90 degrees from the left position (which is 45 degrees left of initial)
+                            # So target is initial + 45 degrees to the right
+                            lock_target_roll = lock_initial_roll + lock_wrist_rotation_rad
+                            print(f'LOCK: Phase 3 - Rotating right to {np.degrees(lock_target_roll):.1f} degrees')
+
+                    elif lock_phase == 'right':
+                        roll_error = abs(lock_target_roll - current_roll)
+                        if roll_error < 0.05:  # Within ~3 degrees tolerance
+                            lock_phase = 'complete'
+                            print('LOCK: Twist complete!')
+                        else:
+                            robot.end_of_arm.get_joint('wrist_roll').move_to(lock_target_roll, v_des=1.0, a_des=2.0)
 
                     robot.push_command()
 
                 # After lock is complete or timeout, transition back to reach
-                if lock_complete or lock_state_count > 60:  # ~4 seconds timeout at 15Hz
+                if lock_phase == 'complete' or lock_state_count > 90:  # ~6 seconds timeout at 15Hz
                     cmd = zero_vel.copy()
                     behavior = 'reach'
                     pre_reach = True
