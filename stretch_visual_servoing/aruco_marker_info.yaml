@@ -17,12 +17,12 @@
   name: 'finger_right'
   link: 'link_finger_right'
 '5':
-  length_mm: 50
+  length_mm: 14
   use_rgb_only: True
   name: 'button_left'
   link: 'None'
 '4':
-  length_mm: 50
+  length_mm: 14
   use_rgb_only: True
   name: 'button_right'
   link: 'None'

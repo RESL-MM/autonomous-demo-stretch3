@@ -101,7 +101,7 @@ seconds_of_timing_history = 1
 toy_depth_m = 0.055
 toy_width_m = 0.0542
 
-grasp_if_error_below_this = 0.16
+grasp_if_error_below_this = 0.15
 
 # Find a way to make the gripper faster? These are the maximum
 # available velocities.
@@ -672,7 +672,9 @@ def main(use_yolo, use_remote_computer, exposure):
                     yaw_velocity = -x_error
                     pitch_velocity = -y_error
 
-                    roll_velocity =  0.0 - joint_state['wrist_roll_pos']
+                    # Rotate to 45 degrees left (negative) while approaching
+                    target_roll = -lock_wrist_rotation_rad  # -45 degrees
+                    roll_velocity = target_roll - joint_state['wrist_roll_pos']
 
                     # Transform camera frame errors into errors for the Cartesian joints
                     yaw = joint_state['wrist_yaw_pos']
@@ -722,17 +724,21 @@ def main(use_yolo, use_remote_computer, exposure):
                     #     cmd['gripper_open'] = gripper_open_speed
 
                     if target_error < grasp_if_error_below_this:
+                        # Close enough - transition to lock behavior
                         cmd = zero_vel.copy()
+                        controller.set_command(cmd)
+                        print('Target reached - transitioning to LOCK behavior')
+                        behavior = 'lock'
                     else:
                         cmd['gripper_open'] = 0.0
 
-                    cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
-                    cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
+                        cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
+                        cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
 
-                    if motion_on:
-                        cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                        cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                        controller.set_command(cmd)
+                        if motion_on:
+                            cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                            cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                            controller.set_command(cmd)
 
                 else:
                     joint_state = controller.get_joint_state()
@@ -766,52 +772,80 @@ def main(use_yolo, use_remote_computer, exposure):
                 # Phase 1: rotate left 45 degrees
                 # Phase 2: wait 1 second
                 # Phase 3: rotate right 90 degrees
+                # Phase 4: retract arm back
                 if prev_behavior != 'lock':
                     lock_state_count = 0
-                    lock_phase = 'left'
                     lock_initial_roll = joint_state['wrist_roll_pos']
-                    lock_target_roll = lock_initial_roll - lock_wrist_rotation_rad  # Left 45 degrees
-                    lock_wait_start = None
-                    print(f'LOCK: Phase 1 - Rotating left to {np.degrees(lock_target_roll):.1f} degrees')
+                    lock_target_roll = -lock_wrist_rotation_rad  # Target is -45 degrees
+                    
+                    # Check if already at target position (should be from reach behavior)
+                    roll_error = abs(lock_target_roll - joint_state['wrist_roll_pos'])
+                    if roll_error < 0.1:  # Within ~6 degrees tolerance
+                        # Already at left position, skip to wait
+                        lock_phase = 'wait'
+                        lock_wait_start = time.time()
+                        print(f'LOCK: Wrist already at {np.degrees(joint_state["wrist_roll_pos"]):.1f} degrees, starting wait phase')
+                    else:
+                        # Need to rotate left first
+                        lock_phase = 'left'
+                        lock_wait_start = None
+                        print(f'LOCK: Phase 1 - Rotating left to {np.degrees(lock_target_roll):.1f} degrees')
                 prev_behavior = behavior
 
-                with controller.lock:
-                    current_roll = joint_state['wrist_roll_pos']
+                if lock_phase in ['left', 'wait', 'right']:
+                    with controller.lock:
+                        current_roll = joint_state['wrist_roll_pos']
 
-                    if lock_phase == 'left':
-                        roll_error = abs(lock_target_roll - current_roll)
-                        if roll_error < 0.05:  # Within ~3 degrees tolerance
-                            lock_phase = 'wait'
-                            lock_wait_start = time.time()
-                            print('LOCK: Phase 2 - Waiting 1 second')
-                        else:
-                            robot.end_of_arm.get_joint('wrist_roll').move_to(lock_target_roll, v_des=1.0, a_des=2.0)
+                        if lock_phase == 'left':
+                            roll_error = abs(lock_target_roll - current_roll)
+                            if roll_error < 0.05:  # Within ~3 degrees tolerance
+                                lock_phase = 'wait'
+                                lock_wait_start = time.time()
+                                print('LOCK: Phase 2 - Waiting 1 second')
+                            else:
+                                robot.end_of_arm.get_joint('wrist_roll').move_to(lock_target_roll, v_des=1.0, a_des=2.0)
 
-                    elif lock_phase == 'wait':
-                        if time.time() - lock_wait_start >= 1.0:
-                            lock_phase = 'right'
-                            # Right 90 degrees from the left position (which is 45 degrees left of initial)
-                            # So target is initial + 45 degrees to the right
-                            lock_target_roll = lock_initial_roll + lock_wrist_rotation_rad
-                            print(f'LOCK: Phase 3 - Rotating right to {np.degrees(lock_target_roll):.1f} degrees')
+                        elif lock_phase == 'wait':
+                            if time.time() - lock_wait_start >= 1.0:
+                                lock_phase = 'right'
+                                # Rotate right to +45 degrees (90 degrees total from -45 to +45)
+                                lock_target_roll = lock_wrist_rotation_rad
+                                print(f'LOCK: Phase 3 - Rotating right to {np.degrees(lock_target_roll):.1f} degrees')
 
-                    elif lock_phase == 'right':
-                        roll_error = abs(lock_target_roll - current_roll)
-                        if roll_error < 0.05:  # Within ~3 degrees tolerance
-                            lock_phase = 'complete'
-                            print('LOCK: Twist complete!')
-                        else:
-                            robot.end_of_arm.get_joint('wrist_roll').move_to(lock_target_roll, v_des=1.0, a_des=2.0)
+                        elif lock_phase == 'right':
+                            roll_error = abs(lock_target_roll - current_roll)
+                            if roll_error < 0.05:  # Within ~3 degrees tolerance
+                                lock_phase = 'retract'
+                                print('LOCK: Phase 4 - Retracting arm')
+                            else:
+                                robot.end_of_arm.get_joint('wrist_roll').move_to(lock_target_roll, v_des=1.0, a_des=2.0)
 
-                    robot.push_command()
+                        robot.push_command()
 
-                # After lock is complete or timeout, transition back to reach
-                if lock_phase == 'complete' or lock_state_count > 90:  # ~6 seconds timeout at 15Hz
+                elif lock_phase == 'retract':
+                    # Retract the arm back
+                    cmd = {
+                        'lift_up': 0.3,
+                        'arm_out': -1.0
+                    }
+                    
+                    # Check if arm is fully retracted
+                    if joint_state['arm_pos'] < (0.02 + min_joint_state['arm_pos']):
+                        lock_phase = 'complete'
+                        print('LOCK: Retraction complete!')
+                        cmd = zero_vel.copy()
+                    
+                    if motion_on and lock_phase == 'retract':
+                        cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                        cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                        controller.set_command(cmd)
+
+                # After lock is complete or timeout, finish the program
+                if lock_phase == 'complete' or lock_state_count > 150:  # ~10 seconds timeout at 15Hz
                     cmd = zero_vel.copy()
-                    behavior = 'reach'
-                    pre_reach = True
-                    last_target_error = None  # Reset for next reach attempt
-                    print('LOCK: Behavior complete, returning to reach')
+                    controller.set_command(cmd)
+                    print('LOCK: Behavior complete! Exiting program...')
+                    break  # Exit the main loop
 
                 lock_state_count = lock_state_count + 1
 
