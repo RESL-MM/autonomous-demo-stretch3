@@ -101,7 +101,7 @@ seconds_of_timing_history = 1
 toy_depth_m = 0.055
 toy_width_m = 0.0542
 
-grasp_if_error_below_this = 0.15
+grasp_if_error_below_this = 0.13
 
 # Find a way to make the gripper faster? These are the maximum
 # available velocities.
