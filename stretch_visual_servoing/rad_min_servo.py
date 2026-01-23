@@ -6,6 +6,7 @@ import normalized_velocity_control as nvc
 import stretch_body.robot as rb
 import time
 import aruco_detector as ad
+import aruco_to_fingertips as af
 import yaml
 from yaml.loader import SafeLoader
 from scipy.spatial.transform import Rotation
@@ -62,10 +63,11 @@ motion_on = True
 print_timing = True
 
 stop_if_toy_not_detected_this_many_frames = 10 #4 #1
+stop_if_fingers_not_detected_this_many_frames = 10 #4 #1
 
 # Lock behavior parameters
 lock_wrist_rotation_rad = np.pi / 4  # 45 degrees counterclockwise
-lock_error_threshold = 0.25  # 25 cm - if we were this close before losing detection, proceed to lock
+lock_error_threshold = 0.1  # 25 cm - if we were this close before losing detection, proceed to lock
 
 max_retract_state_count = 60
 
@@ -99,7 +101,7 @@ seconds_of_timing_history = 1
 toy_depth_m = 0.055
 toy_width_m = 0.0542
 
-stop_if_error_below_this = 0.1
+grasp_if_error_below_this = 0.05
 
 # Find a way to make the gripper faster? These are the maximum
 # available velocities.
@@ -118,10 +120,6 @@ default_between_fingertips = np.array([0.01, 0.035, 0.17])
 distance_between_fully_open_fingertips = 0.16
 max_toy_z_for_default_fingertips = 0.12
 
-# TODO: update tool offset values
-# x: left/right, y: up/down, z: in/out
-tool_offset = np.array([0.0, 0.1, -0.35])
-
 ####################################
 ## Gains for Reach Behavior
 
@@ -136,9 +134,9 @@ overall_visual_servoing_velocity_scale = 1.0
 joint_visual_servoing_velocity_scale = {
     'base_counterclockwise' : 4.0,
     'lift_up' : 6.0,
-    'arm_out' : 2.0,
-    'wrist_yaw_counterclockwise' : 2.0,
-    'wrist_pitch_up' : 2.0,
+    'arm_out' : 6.0,
+    'wrist_yaw_counterclockwise' : 4.0,
+    'wrist_pitch_up' : 6.0,
     'wrist_roll_counterclockwise': 1.0,
     'gripper_open' : 1.0
 }
@@ -337,13 +335,34 @@ def main(use_yolo, use_remote_computer, exposure):
         controller = nvc.NormalizedVelocityControl(robot)
         controller.reset_base_odometry()
 
-        marker_info = {}
-        with open('aruco_marker_info.yaml') as f:
-            marker_info = yaml.load(f, Loader=SafeLoader)
+        if not use_yolo: 
+            marker_info = {}
+            with open('aruco_marker_info.yaml') as f:
+                marker_info = yaml.load(f, Loader=SafeLoader)
 
-        detect_ball_on = False
-        detect_aruco_toy_on = True
-        aruco_detector = ad.ArucoDetector(marker_info=marker_info, show_debug_images=True, use_apriltag_refinement=False, brighten_images=True)
+            detect_ball_on = False
+            detect_aruco_toy_on = True
+            aruco_detector = ad.ArucoDetector(marker_info=marker_info, show_debug_images=True, use_apriltag_refinement=False, brighten_images=True)
+            aruco_to_fingertips = af.ArucoToFingertips(default_height_above_mounting_surface=af.suctioncup_height['cup_bottom'])
+        else:
+            yolo_context = zmq.Context()
+            yolo_socket = yolo_context.socket(zmq.SUB)
+            yolo_socket.setsockopt(zmq.SUBSCRIBE, b'')
+            yolo_socket.setsockopt(zmq.SNDHWM, 1)
+            yolo_socket.setsockopt(zmq.RCVHWM, 1)
+            yolo_socket.setsockopt(zmq.CONFLATE, 1)
+
+            if use_remote_computer:
+                yolo_address = 'tcp://' + yn.remote_computer_ip + ':' + str(yn.yolo_port)
+            else:
+                yolo_address = 'tcp://' + '127.0.0.1' + ':' + str(yn.yolo_port)
+
+            yolo_socket.connect(yolo_address)
+
+            regulate_socket_poll = RegulatePollTimeout(target_control_loop_rate_hz,
+                                                       seconds_of_timing_history,
+                                                       timeout_proportional_gain,
+                                                       debug_on=False)
 
         first_frame = True
 
@@ -353,72 +372,134 @@ def main(use_yolo, use_remote_computer, exposure):
         pre_reach = True
         last_target_error = None  # Track the last known target error before detection was lost
 
-        # TODO: add code that closes the gripper as much as possible
+        # Assume that the gripper starts out fully opened
+        distance_between_fingertips = distance_between_fully_open_fingertips
+        prev_distance_between_fingertips = distance_between_fully_open_fingertips
 
-        pipeline, profile = dh.start_d405(exposure)
+        if not use_yolo:
+            pipeline, profile = dh.start_d405(exposure)
 
         frames_since_toy_detected = 0
+        frames_since_fingers_detected = 0
             
         loop_timer = lt.LoopTimer()
+
+        fingertips = {}
         
         while True:
             loop_timer.start_of_iteration()
 
             toy_target = None
+            fingertip_left_pos = None       
+            fingertip_right_pos = None
+            between_fingertips = None
+            distance_between_fingertips = None
             
-            frames = pipeline.wait_for_frames()
-            depth_frame = frames.get_depth_frame()
-            color_frame = frames.get_color_frame()
-            if (not depth_frame) or (not color_frame):
-                continue
+            if not use_yolo:
+                frames = pipeline.wait_for_frames()
+                depth_frame = frames.get_depth_frame()
+                color_frame = frames.get_color_frame()
+                if (not depth_frame) or (not color_frame):
+                    continue
 
-            if first_frame:
-                depth_scale = dh.get_depth_scale(profile)
-                print('depth_scale =', depth_scale)
-                print()
+                if first_frame:
+                    depth_scale = dh.get_depth_scale(profile)
+                    print('depth_scale =', depth_scale)
+                    print()
 
-                depth_camera_info = dh.get_camera_info(depth_frame)
-                color_camera_info = dh.get_camera_info(color_frame)
-                camera_info = depth_camera_info
-                #camera_info = color_camera_info
-                print_camera_info = True
-                if print_camera_info: 
-                    for camera_info, name in [(depth_camera_info, 'depth'), (color_camera_info, 'color')]:
-                        print(name + ' camera_info:')
-                        print(camera_info)
-                        print()
+                    depth_camera_info = dh.get_camera_info(depth_frame)
+                    color_camera_info = dh.get_camera_info(color_frame)
+                    camera_info = depth_camera_info
+                    #camera_info = color_camera_info
+                    print_camera_info = True
+                    if print_camera_info: 
+                        for camera_info, name in [(depth_camera_info, 'depth'), (color_camera_info, 'color')]:
+                            print(name + ' camera_info:')
+                            print(camera_info)
+                            print()
 
-                first_frame = False
-                
-            depth_image = np.asanyarray(depth_frame.get_data())
-            color_image = np.asanyarray(color_frame.get_data())
-            image = np.copy(color_image)
+                    first_frame = False
+                    
+                depth_image = np.asanyarray(depth_frame.get_data())
+                color_image = np.asanyarray(color_frame.get_data())
+                image = np.copy(color_image)
 
-            if detect_aruco_toy_on:                                                         
-                aruco_detector.update(color_image, camera_info)                             
-                markers = aruco_detector.get_detected_marker_dict()                         
-                                                                                            
-                button_left_pos = None                                                      
-                button_right_pos = None                                                     
-                for k in markers:                                                           
-                    m = markers[k]                                                          
-                    name = m['info']['name']                                                
-                    if name == 'button_left':                                               
-                        button_left_pos = m['pos']                                          
-                    elif name == 'button_right':                                            
-                        button_right_pos = m['pos']                                         
-                                                                                            
-                # Calculate midpoint if both markers detected                               
-                if button_left_pos is not None and button_right_pos is not None:            
-                    toy_target = (button_left_pos + button_right_pos) / 2.0   
+                if detect_aruco_toy_on:                                                         
+                    aruco_detector.update(color_image, camera_info)                             
+                    markers = aruco_detector.get_detected_marker_dict()                         
+                    fingertips = aruco_to_fingertips.get_fingertips(markers)                    
+                                                                                                
+                    button_left_pos = None    
+                    button_left_z_axis = None                                                  
+                    button_right_pos = None
+                    button_right_z_axis = None                                                     
+                    for k in markers:                                                           
+                        m = markers[k]                                                          
+                        name = m['info']['name']                                                
+                        if name == 'button_left':                                               
+                            button_left_pos = m['pos']
+                            button_left_z_axis = m['z_axis']                                          
+                        elif name == 'button_right':                                            
+                            button_right_pos = m['pos']       
+                            button_right_z_axis = m['z_axis']                                  
+                                                                                                
+                    # Calculate midpoint if both markers detected                               
+                    if button_left_pos is not None and button_right_pos is not None: 
+                        # TODO: need to normalize Z axis?           
+                        toy_target = ((button_left_pos + button_right_pos) / 2.0) + ((button_left_z_axis + button_right_z_axis) / 2.0) * 0.1 
+                    
+            else:
+                timeout_for_socket_poll_int = regulate_socket_poll.get_poll_timeout()
+                #print('timeout_for_socket_poll_int =', timeout_for_socket_poll_int)
+                poll_results = yolo_socket.poll(timeout=timeout_for_socket_poll_int,
+                                                flags=zmq.POLLIN)
+                if poll_results == zmq.POLLIN:
+                    yolo_results = yolo_socket.recv_pyobj()
+                    #print('yolo_results =', yolo_results)
+                    fingertips = yolo_results.get('fingertips', None)
+                    yolo = yolo_results.get('yolo')
+                    if len(yolo) > 0: 
+                        toy_target = yolo[0]['grasp_center_xyz']
+                regulate_socket_poll.run_after_polling()
 
             print()
 
-            toy_name = 'ArUco Cube'
+            if use_yolo:
+                toy_name = 'Tennis Ball'
+            else:
+                toy_name = 'ArUco Cube'
             if toy_target is None:
                 print(toy_name + ' Detection: FAILED')
             else:
                 print(toy_name + ' Detection: SUCCEEDED')
+ 
+            fingertip_left_pose = None
+            fingertip_right_pose = None
+            f = fingertips.get('left', None)
+            if f is not None:
+                fingertip_left_pos = f['pos']
+                print('Left Finger ArUco Marker Detection: SUCCEEDED')
+            else:
+                print('Left Finger ArUco Marker Detection: FAILED')
+
+            f = fingertips.get('right', None)
+            if f is not None:
+                fingertip_right_pos = f['pos']
+                print('Right Finger ArUco Marker Detection: SUCCEEDED')
+            else:
+                print('Right Finger ArUco Marker Detection: FAILED')
+                
+            if (fingertip_left_pos is not None) and (fingertip_right_pos is not None): 
+                between_fingertips = (fingertip_left_pos + fingertip_right_pos)/2.0
+                prev_distance_between_fingertips = distance_between_fingertips
+                distance_between_fingertips = np.linalg.norm(fingertip_left_pos - fingertip_right_pos)
+            elif toy_target is not None:
+                # The toy is so close to the camera that the finger
+                # markers might be occluded, so hallucinate the between
+                # fingers position to enhance retraction performance.
+                if toy_target[2] < max_toy_z_for_default_fingertips:
+                    between_fingertips = default_between_fingertips
+                    distance_between_fingertips = prev_distance_between_fingertips
 
             joint_state = controller.get_joint_state()
             # convert base odometry angle to be in the range -pi to pi
@@ -426,15 +507,142 @@ def main(use_yolo, use_remote_computer, exposure):
 
             print('gripper effort = {:.2f}'.format(joint_state['gripper_eff']))
 
+            if distance_between_fingertips is not None: 
+                print('distance_between_fingertips = {:.2f} cm'.format(100.0 * distance_between_fingertips))
+
             if toy_target is not None:
-                position_error = toy_target - tool_offset
+                frames_since_toy_detected = 0
+            else:
+                frames_since_toy_detected = frames_since_toy_detected + 1
+
+            if between_fingertips is not None:
+                frames_since_fingers_detected = 0
+            else: 
+                frames_since_fingers_detected = frames_since_fingers_detected + 1
+            print('grasping_the_target =', grasping_the_target)
+
+            if distance_between_fingertips is not None:
+                if distance_between_fingertips < lost_ball_fingertips_too_close:
+                    if grasping_the_target: 
+                        print('I LOST THE BALL!!!')
+                        grasping_the_target = False
+
+            if (between_fingertips is not None) and (toy_target is not None):            
+                TOOL_OFFSET = np.array([0.0, 0.05, 0.01])
+                position_error = toy_target - between_fingertips - TOOL_OFFSET
                 target_error = np.linalg.norm(position_error)
-                print(f"toy target: {toy_target}")
+                last_target_error = target_error  # Track for lock behavior
+                print('target_error = {:.2f} cm'.format(100.0 * target_error))
+                if target_error >  lost_ball_target_error_too_large:
+                    if grasping_the_target: 
+                        print('I LOST THE BALL!!!')
+                        grasping_the_target = False
 
             print('behavior =', behavior)
             print('pre_reach =', pre_reach)
                         
-            if behavior == 'reach':
+            if (behavior == 'celebrate') and (not grasping_the_target):
+                behavior = 'disappointed'
+
+            if behavior == 'retract':
+
+                if prev_behavior != 'retract':
+                    retract_state_count = 0
+                prev_behavior = behavior
+
+                cmd = {
+                    'lift_up': 0.3, #0.15
+                    'arm_out' : -1.0
+                    }
+
+                if (not grasping_the_target) or (retract_state_count > max_retract_state_count) or (joint_state['arm_pos'] < (0.01 + min_joint_state['arm_pos'])): 
+                    cmd = zero_vel.copy()
+                    if grasping_the_target: 
+                        behavior = 'celebrate'
+                    else:
+                        behavior = 'disappointed'
+
+                if motion_on:
+                    cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                    cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                    controller.set_command(cmd)
+
+                retract_state_count = retract_state_count + 1
+
+            elif behavior == 'celebrate':
+
+                if prev_behavior != 'celebrate':
+                    celebrate_state_count = 0
+                    pitch_ready = False
+                    yaw_ready = False
+                    ready_to_waggle = False
+                    waggle_count = 0
+
+                prev_behavior = behavior
+
+                with controller.lock:
+                    pitch = joint_state['wrist_pitch_pos']
+                    if abs(pitch - 0.1) <= 0.1:
+                        pitch_ready = True
+
+                    yaw = joint_state['wrist_yaw_pos']
+                    if abs(yaw) <= 0.1:
+                        yaw_ready = True
+
+                    if pitch_ready and yaw_ready:
+                        ready_to_waggle = True
+
+                    if not ready_to_waggle: 
+                        if abs(pitch - 0.1) > 0.05:
+                            pitch_ready = False
+                            robot.end_of_arm.get_joint('wrist_pitch').move_to(0.1)
+                        if abs(yaw) > 0.05:
+                            yaw_ready = False
+                            robot.end_of_arm.get_joint('wrist_yaw').move_to(0.0)
+
+                    if ready_to_waggle:
+                        waggle_direction = int(waggle_count / 4) % 2
+
+                        if waggle_direction == 0:
+                            robot.end_of_arm.get_joint('wrist_yaw').move_by(0.05, v_des=3.0, a_des=10.0)
+                        else:
+                            robot.end_of_arm.get_joint('wrist_yaw').move_by(-0.05, v_des=3.0, a_des=10.0)
+                        waggle_count = waggle_count + 1
+                    robot.push_command()
+
+                if (waggle_count > 16) or (celebrate_state_count > 100):
+                    cmd = zero_vel.copy()
+                    behavior = 'reach'
+                    pre_reach = True
+
+                if not grasping_the_target:
+                    cmd = zero_vel.copy()
+                    behavior = 'disappointed'
+
+                celebrate_state_count = celebrate_state_count + 1
+
+            elif behavior == 'disappointed':
+
+                if prev_behavior != 'disappointed':
+                    disappointed_state_count = 0
+                prev_behavior = behavior
+
+                with controller.lock:
+
+                    pitch = joint_state['wrist_pitch_pos']
+                    if pitch > -1.0:
+                        robot.end_of_arm.get_joint('wrist_pitch').move_to(-0.8, v_des=0.5, a_des=1.0) 
+
+                    robot.push_command() 
+
+                if (disappointed_state_count > 40):
+                    cmd = zero_vel.copy()
+                    behavior = 'reach'
+                    pre_reach = True #False
+
+                disappointed_state_count = disappointed_state_count + 1
+
+            elif behavior == 'reach':
 
                 prev_behavior = behavior
 
@@ -462,15 +670,16 @@ def main(use_yolo, use_remote_computer, exposure):
                         cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                         controller.set_command(cmd)
 
-                elif (toy_target is not None) and (target_error <= max_distance_for_attempted_reach):            
-                    print(target_error)
+                elif (between_fingertips is not None) and (toy_target is not None) and (target_error <= max_distance_for_attempted_reach):            
 
                     x_error, y_error, z_error = position_error
 
                     yaw_velocity = -x_error
                     pitch_velocity = -y_error
 
-                    roll_velocity =  0.0 - joint_state['wrist_roll_pos']
+                    # Rotate to 45 degrees left (negative) while approaching
+                    target_roll = -lock_wrist_rotation_rad  # -45 degrees
+                    roll_velocity = target_roll - joint_state['wrist_roll_pos']
 
                     # Transform camera frame errors into errors for the Cartesian joints
                     yaw = joint_state['wrist_yaw_pos']
@@ -519,20 +728,24 @@ def main(use_yolo, use_remote_computer, exposure):
                     # else:
                     #     cmd['gripper_open'] = gripper_open_speed
 
-                    if target_error < stop_if_error_below_this:
+                    if target_error < grasp_if_error_below_this:
+                        # Close enough - transition to lock behavior
                         cmd = zero_vel.copy()
                         controller.set_command(cmd)
+                        print('Target reached - transitioning to LOCK behavior')
+                        behavior = 'lock'
+                    else:
+                        cmd['gripper_open'] = 0.0
 
-                    cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
-                    cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
+                        cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
+                        cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
 
-                    if motion_on:
-                        cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                        cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                        controller.set_command(cmd)
+                        if motion_on:
+                            cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                            cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                            controller.set_command(cmd)
 
                 else:
-                    # if not reaching and toy_target...?
                     joint_state = controller.get_joint_state()
                     stop_joints = zero_vel.copy()
 
@@ -547,6 +760,8 @@ def main(use_yolo, use_remote_computer, exposure):
                     elif frames_since_toy_detected >= stop_if_toy_not_detected_this_many_frames:
                         cmd = stop_joints
                         cmd['gripper_open'] = gripper_open_speed
+                    elif frames_since_fingers_detected >= stop_if_fingers_not_detected_this_many_frames:
+                        cmd = stop_joints
                     else:
                         # Stop at Boundaries
                         cmd = { k:v for (k,v) in stop_joints.items() if (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]]) }
@@ -562,52 +777,80 @@ def main(use_yolo, use_remote_computer, exposure):
                 # Phase 1: rotate left 45 degrees
                 # Phase 2: wait 1 second
                 # Phase 3: rotate right 90 degrees
+                # Phase 4: retract arm back
                 if prev_behavior != 'lock':
                     lock_state_count = 0
-                    lock_phase = 'left'
                     lock_initial_roll = joint_state['wrist_roll_pos']
-                    lock_target_roll = lock_initial_roll - lock_wrist_rotation_rad  # Left 45 degrees
-                    lock_wait_start = None
-                    print(f'LOCK: Phase 1 - Rotating left to {np.degrees(lock_target_roll):.1f} degrees')
+                    lock_target_roll = -lock_wrist_rotation_rad  # Target is -45 degrees
+                    
+                    # Check if already at target position (should be from reach behavior)
+                    roll_error = abs(lock_target_roll - joint_state['wrist_roll_pos'])
+                    if roll_error < 0.1:  # Within ~6 degrees tolerance
+                        # Already at left position, skip to wait
+                        lock_phase = 'wait'
+                        lock_wait_start = time.time()
+                        print(f'LOCK: Wrist already at {np.degrees(joint_state["wrist_roll_pos"]):.1f} degrees, starting wait phase')
+                    else:
+                        # Need to rotate left first
+                        lock_phase = 'left'
+                        lock_wait_start = None
+                        print(f'LOCK: Phase 1 - Rotating left to {np.degrees(lock_target_roll):.1f} degrees')
                 prev_behavior = behavior
 
-                with controller.lock:
-                    current_roll = joint_state['wrist_roll_pos']
+                if lock_phase in ['left', 'wait', 'right']:
+                    with controller.lock:
+                        current_roll = joint_state['wrist_roll_pos']
 
-                    if lock_phase == 'left':
-                        roll_error = abs(lock_target_roll - current_roll)
-                        if roll_error < 0.05:  # Within ~3 degrees tolerance
-                            lock_phase = 'wait'
-                            lock_wait_start = time.time()
-                            print('LOCK: Phase 2 - Waiting 1 second')
-                        else:
-                            robot.end_of_arm.get_joint('wrist_roll').move_to(lock_target_roll, v_des=1.0, a_des=2.0)
+                        if lock_phase == 'left':
+                            roll_error = abs(lock_target_roll - current_roll)
+                            if roll_error < 0.05:  # Within ~3 degrees tolerance
+                                lock_phase = 'wait'
+                                lock_wait_start = time.time()
+                                print('LOCK: Phase 2 - Waiting 1 second')
+                            else:
+                                robot.end_of_arm.get_joint('wrist_roll').move_to(lock_target_roll, v_des=1.0, a_des=2.0)
 
-                    elif lock_phase == 'wait':
-                        if time.time() - lock_wait_start >= 1.0:
-                            lock_phase = 'right'
-                            # Right 90 degrees from the left position (which is 45 degrees left of initial)
-                            # So target is initial + 45 degrees to the right
-                            lock_target_roll = lock_initial_roll + lock_wrist_rotation_rad
-                            print(f'LOCK: Phase 3 - Rotating right to {np.degrees(lock_target_roll):.1f} degrees')
+                        elif lock_phase == 'wait':
+                            if time.time() - lock_wait_start >= 1.0:
+                                lock_phase = 'right'
+                                # Rotate right to +45 degrees (90 degrees total from -45 to +45)
+                                lock_target_roll = lock_wrist_rotation_rad
+                                print(f'LOCK: Phase 3 - Rotating right to {np.degrees(lock_target_roll):.1f} degrees')
 
-                    elif lock_phase == 'right':
-                        roll_error = abs(lock_target_roll - current_roll)
-                        if roll_error < 0.05:  # Within ~3 degrees tolerance
-                            lock_phase = 'complete'
-                            print('LOCK: Twist complete!')
-                        else:
-                            robot.end_of_arm.get_joint('wrist_roll').move_to(lock_target_roll, v_des=1.0, a_des=2.0)
+                        elif lock_phase == 'right':
+                            roll_error = abs(lock_target_roll - current_roll)
+                            if roll_error < 0.05:  # Within ~3 degrees tolerance
+                                lock_phase = 'retract'
+                                print('LOCK: Phase 4 - Retracting arm')
+                            else:
+                                robot.end_of_arm.get_joint('wrist_roll').move_to(lock_target_roll, v_des=1.0, a_des=2.0)
 
-                    robot.push_command()
+                        robot.push_command()
 
-                # After lock is complete or timeout, transition back to reach
-                if lock_phase == 'complete' or lock_state_count > 90:  # ~6 seconds timeout at 15Hz
+                elif lock_phase == 'retract':
+                    # Retract the arm back
+                    cmd = {
+                        'lift_up': 0.3,
+                        'arm_out': -1.0
+                    }
+                    
+                    # Check if arm is fully retracted
+                    if joint_state['arm_pos'] < (0.02 + min_joint_state['arm_pos']):
+                        lock_phase = 'complete'
+                        print('LOCK: Retraction complete!')
+                        cmd = zero_vel.copy()
+                    
+                    if motion_on and lock_phase == 'retract':
+                        cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                        cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                        controller.set_command(cmd)
+
+                # After lock is complete or timeout, finish the program
+                if lock_phase == 'complete' or lock_state_count > 150:  # ~10 seconds timeout at 15Hz
                     cmd = zero_vel.copy()
-                    behavior = 'reach'
-                    pre_reach = True
-                    last_target_error = None  # Reset for next reach attempt
-                    print('LOCK: Behavior complete, returning to reach')
+                    controller.set_command(cmd)
+                    print('LOCK: Behavior complete! Exiting program...')
+                    break  # Exit the main loop
 
                 lock_state_count = lock_state_count + 1
 
@@ -626,17 +869,17 @@ def main(use_yolo, use_remote_computer, exposure):
                     center = np.round(dh.pixel_from_3d(toy_target, camera_info)).astype(np.int32)
                     draw_text(image, center, text_lines)
 
-                # if between_fingertips is not None: 
-                #     # draw white circle for point between fingertip
-                #     draw_origin(image, camera_info, between_fingertips, (255, 255, 255))
+                if between_fingertips is not None: 
+                    # draw white circle for point between fingertip
+                    draw_origin(image, camera_info, between_fingertips, (255, 255, 255))
 
                 
-                # aruco_to_fingertips.draw_fingertip_frames(fingertips,
-                #                                           image,
-                #                                           camera_info,
-                #                                           axis_length_in_m=0.02,
-                #                                           draw_origins=True,
-                #                                           write_coordinates=True)
+                aruco_to_fingertips.draw_fingertip_frames(fingertips,
+                                                          image,
+                                                          camera_info,
+                                                          axis_length_in_m=0.02,
+                                                          draw_origins=True,
+                                                          write_coordinates=True)
                 
 
                 
