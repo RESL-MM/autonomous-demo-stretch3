@@ -99,7 +99,7 @@ seconds_of_timing_history = 1
 toy_depth_m = 0.055
 toy_width_m = 0.0542
 
-stop_if_error_below_this = 0.16
+stop_if_error_below_this = 0.1
 
 # Find a way to make the gripper faster? These are the maximum
 # available velocities.
@@ -120,7 +120,7 @@ max_toy_z_for_default_fingertips = 0.12
 
 # TODO: update tool offset values
 # x: left/right, y: up/down, z: in/out
-tool_offset = np.array([0.0, 0.1, 0.35])
+tool_offset = np.array([0.0, 0.1, -0.35])
 
 ####################################
 ## Gains for Reach Behavior
@@ -136,9 +136,9 @@ overall_visual_servoing_velocity_scale = 1.0
 joint_visual_servoing_velocity_scale = {
     'base_counterclockwise' : 4.0,
     'lift_up' : 6.0,
-    'arm_out' : 6.0,
-    'wrist_yaw_counterclockwise' : 4.0,
-    'wrist_pitch_up' : 6.0,
+    'arm_out' : 2.0,
+    'wrist_yaw_counterclockwise' : 2.0,
+    'wrist_pitch_up' : 2.0,
     'wrist_roll_counterclockwise': 1.0,
     'gripper_open' : 1.0
 }
@@ -426,8 +426,10 @@ def main(use_yolo, use_remote_computer, exposure):
 
             print('gripper effort = {:.2f}'.format(joint_state['gripper_eff']))
 
-            position_error = toy_target - tool_offset
-            target_error = np.linalg.norm(position_error)
+            if toy_target is not None:
+                position_error = toy_target - tool_offset
+                target_error = np.linalg.norm(position_error)
+                print(f"toy target: {toy_target}")
 
             print('behavior =', behavior)
             print('pre_reach =', pre_reach)
@@ -461,6 +463,7 @@ def main(use_yolo, use_remote_computer, exposure):
                         controller.set_command(cmd)
 
                 elif (toy_target is not None) and (target_error <= max_distance_for_attempted_reach):            
+                    print(target_error)
 
                     x_error, y_error, z_error = position_error
 
@@ -518,6 +521,7 @@ def main(use_yolo, use_remote_computer, exposure):
 
                     if target_error < stop_if_error_below_this:
                         cmd = zero_vel.copy()
+                        controller.set_command(cmd)
 
                     cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
                     cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
@@ -543,8 +547,6 @@ def main(use_yolo, use_remote_computer, exposure):
                     elif frames_since_toy_detected >= stop_if_toy_not_detected_this_many_frames:
                         cmd = stop_joints
                         cmd['gripper_open'] = gripper_open_speed
-                    elif frames_since_fingers_detected >= stop_if_fingers_not_detected_this_many_frames:
-                        cmd = stop_joints
                     else:
                         # Stop at Boundaries
                         cmd = { k:v for (k,v) in stop_joints.items() if (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]]) }
@@ -624,17 +626,17 @@ def main(use_yolo, use_remote_computer, exposure):
                     center = np.round(dh.pixel_from_3d(toy_target, camera_info)).astype(np.int32)
                     draw_text(image, center, text_lines)
 
-                if between_fingertips is not None: 
-                    # draw white circle for point between fingertip
-                    draw_origin(image, camera_info, between_fingertips, (255, 255, 255))
+                # if between_fingertips is not None: 
+                #     # draw white circle for point between fingertip
+                #     draw_origin(image, camera_info, between_fingertips, (255, 255, 255))
 
                 
-                aruco_to_fingertips.draw_fingertip_frames(fingertips,
-                                                          image,
-                                                          camera_info,
-                                                          axis_length_in_m=0.02,
-                                                          draw_origins=True,
-                                                          write_coordinates=True)
+                # aruco_to_fingertips.draw_fingertip_frames(fingertips,
+                #                                           image,
+                #                                           camera_info,
+                #                                           axis_length_in_m=0.02,
+                #                                           draw_origins=True,
+                #                                           write_coordinates=True)
                 
 
                 
