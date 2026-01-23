@@ -67,7 +67,7 @@ stop_if_fingers_not_detected_this_many_frames = 10 #4 #1
 
 # Lock behavior parameters
 lock_wrist_rotation_rad = np.pi / 4  # 45 degrees counterclockwise
-lock_error_threshold = 0.1  # 25 cm - if we were this close before losing detection, proceed to lock
+lock_error_threshold = 0.25  # 25 cm - if we were this close before losing detection, proceed to lock
 
 max_retract_state_count = 60
 
@@ -101,7 +101,7 @@ seconds_of_timing_history = 1
 toy_depth_m = 0.055
 toy_width_m = 0.0542
 
-grasp_if_error_below_this = 0.08
+grasp_if_error_below_this = 0.13
 
 # Find a way to make the gripper faster? These are the maximum
 # available velocities.
@@ -132,11 +132,11 @@ max_gripper_length = 0.26
 overall_visual_servoing_velocity_scale = 1.0
 
 joint_visual_servoing_velocity_scale = {
-    'base_counterclockwise' : 1.0,
-    'lift_up' : 1.0,
-    'arm_out' : 1.0,
-    'wrist_yaw_counterclockwise' : 1.0,
-    'wrist_pitch_up' : 1.0,
+    'base_counterclockwise' : 4.0,
+    'lift_up' : 6.0,
+    'arm_out' : 6.0,
+    'wrist_yaw_counterclockwise' : 4.0,
+    'wrist_pitch_up' : 6.0,
     'wrist_roll_counterclockwise': 1.0,
     'gripper_open' : 1.0
 }
@@ -469,14 +469,10 @@ def main(use_yolo, use_remote_computer, exposure):
                 print(toy_name + ' Detection: SUCCEEDED')
  
             fingertip_left_pose = None
-            fingertip_left_axis = None
             fingertip_right_pose = None
-            fingertip_right_axis = None
-            fingertip_axis = None
             f = fingertips.get('left', None)
             if f is not None:
                 fingertip_left_pos = f['pos']
-                fingertip_left_axis = [f['x_axis'], f['y_axis'], f['z_axis']]
                 print('Left Finger ArUco Marker Detection: SUCCEEDED')
             else:
                 print('Left Finger ArUco Marker Detection: FAILED')
@@ -484,14 +480,12 @@ def main(use_yolo, use_remote_computer, exposure):
             f = fingertips.get('right', None)
             if f is not None:
                 fingertip_right_pos = f['pos']
-                fingertip_right_axis = [f['x_axis'], f['y_axis'], f['z_axis']]
                 print('Right Finger ArUco Marker Detection: SUCCEEDED')
             else:
                 print('Right Finger ArUco Marker Detection: FAILED')
                 
             if (fingertip_left_pos is not None) and (fingertip_right_pos is not None): 
                 between_fingertips = (fingertip_left_pos + fingertip_right_pos)/2.0
-                fingertip_axis = (fingertip_left_axis + fingertip_right_axis)/2.0
                 prev_distance_between_fingertips = distance_between_fingertips
                 distance_between_fingertips = np.linalg.norm(fingertip_left_pos - fingertip_right_pos)
             elif toy_target is not None:
@@ -529,10 +523,8 @@ def main(use_yolo, use_remote_computer, exposure):
                         grasping_the_target = False
 
             if (between_fingertips is not None) and (toy_target is not None):            
-                print(between_fingertips)
-                TOOL_OFFSET = np.array([fingertip_axis[0]*-0.03, fingertip_axis[1]*-0.03, 0.0])
-                #print(between_fingertips + TOOL_OFFSET)
-                position_error = toy_target - between_fingertips - TOOL_OFFSET
+
+                position_error = toy_target - between_fingertips
                 target_error = np.linalg.norm(position_error)
                 last_target_error = target_error  # Track for lock behavior
                 print('target_error = {:.2f} cm'.format(100.0 * target_error))
