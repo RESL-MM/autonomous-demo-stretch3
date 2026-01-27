@@ -67,7 +67,7 @@ stop_if_fingers_not_detected_this_many_frames = 10 #4 #1
 
 # Lock behavior parameters
 lock_wrist_rotation_rad = np.pi / 4  # 45 degrees counterclockwise
-lock_error_threshold = 0.1  # 25 cm - if we were this close before losing detection, proceed to lock
+lock_error_threshold = 0.01  # 25 cm - if we were this close before losing detection, proceed to lock
 
 max_retract_state_count = 60
 
@@ -101,7 +101,7 @@ seconds_of_timing_history = 1
 toy_depth_m = 0.055
 toy_width_m = 0.0542
 
-grasp_if_error_below_this = 0.05
+grasp_if_error_below_this = 0.008
 
 # Find a way to make the gripper faster? These are the maximum
 # available velocities.
@@ -134,7 +134,7 @@ overall_visual_servoing_velocity_scale = 1.0
 joint_visual_servoing_velocity_scale = {
     'base_counterclockwise' : 1.0,
     'lift_up' : 1.0,
-    'arm_out' : 1.0,
+    'arm_out' : 2.0,
     'wrist_yaw_counterclockwise' : 1.0,
     'wrist_pitch_up' : 1.0,
     'wrist_roll_counterclockwise': 1.0,
@@ -317,7 +317,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_to(0.9)
+    robot.lift.move_to(1.00)
     robot.push_command()
     robot.wait_command()
 
@@ -528,7 +528,7 @@ def main(use_yolo, use_remote_computer, exposure):
                         grasping_the_target = False
 
             if (between_fingertips is not None) and (toy_target is not None):            
-                TOOL_OFFSET = np.array([0.0, 0.05, 0.01])
+                TOOL_OFFSET = np.array([0.0, 0.00, 0.00])
                 position_error = toy_target - between_fingertips - TOOL_OFFSET
                 target_error = np.linalg.norm(position_error)
                 last_target_error = target_error  # Track for lock behavior
@@ -678,7 +678,7 @@ def main(use_yolo, use_remote_computer, exposure):
                     pitch_velocity = -y_error
 
                     # Rotate to 45 degrees left (negative) while approaching
-                    target_roll = -lock_wrist_rotation_rad  # -45 degrees
+                    target_roll = 0.0 #  -lock_wrist_rotation_rad  # -45 degrees
                     roll_velocity = target_roll - joint_state['wrist_roll_pos']
 
                     # Transform camera frame errors into errors for the Cartesian joints
