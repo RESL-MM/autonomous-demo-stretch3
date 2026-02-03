@@ -77,11 +77,11 @@ Examples:
   # Run demo 5 times with default settings
   python button_stress_test.py 5
   
-  # Run demo 10 times with YOLO enabled
-  python button_stress_test.py 10 --yolo
+  # Run demo 10 times with custom exposure
+  python button_stress_test.py 10 --exposure medium
   
-  # Run demo 3 times with remote computer and custom exposure
-  python button_stress_test.py 3 --remote --exposure medium
+  # Run demo 3 times with high exposure and custom delay
+  python button_stress_test.py 3 --exposure high --delay 5.0
         """
     )
     
@@ -100,18 +100,6 @@ Examples:
     
     # Forward arguments to button_pressing_demo.py
     parser.add_argument(
-        '-y', '--yolo',
-        action='store_true',
-        help='Use YOLOv8 for object detection (forwarded to demo)'
-    )
-    
-    parser.add_argument(
-        '-r', '--remote',
-        action='store_true',
-        help='Use remote computer for processing (forwarded to demo)'
-    )
-    
-    parser.add_argument(
         '-e', '--exposure',
         type=str,
         default='low',
@@ -125,12 +113,7 @@ Examples:
         parser.error("Number of runs must be at least 1")
     
     # Build argument list to forward to button_pressing_demo.py
-    demo_args = []
-    if args.yolo:
-        demo_args.append('--yolo')
-    if args.remote:
-        demo_args.append('--remote')
-    demo_args.extend(['--exposure', args.exposure])
+    demo_args = ['--exposure', args.exposure]
     
     # Print test configuration
     print("\n" + "="*60)
