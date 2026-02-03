@@ -714,7 +714,7 @@ def main(use_yolo, use_remote_computer, exposure):
                         arm_velocity = arm_retraction_speedup * arm_velocity
 
                     cmd = {
-                        'lift_up' : lift_velocity,
+                        'lift_up' : 0.0,  # Disabled to keep tags in view
                         'arm_out' : arm_velocity,
                         'wrist_yaw_counterclockwise' : yaw_velocity,
                         'wrist_pitch_up' : pitch_velocity,
