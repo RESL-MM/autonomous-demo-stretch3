@@ -438,11 +438,11 @@ def main(use_yolo, use_remote_computer, exposure):
                         name = m['info']['name']
 
                         if dial_turned == False:
-                            left_target = 'button_left'
-                            right_target = 'button_right'
-                        else:
                             left_target = 'left_dial'
                             right_target = 'middle_dialbutton'
+                        else:
+                            left_target = 'button_left'
+                            right_target = 'button_right'
 
                         if name == left_target:                                               
                             button_left_pos = m['pos']                                          
