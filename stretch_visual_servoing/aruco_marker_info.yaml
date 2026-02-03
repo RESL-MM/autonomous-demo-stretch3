@@ -26,6 +26,21 @@
   use_rgb_only: True
   name: 'button_right'
   link: 'None'
+'14':
+  length_mm: 37
+  use_rgb_only: True
+  name: 'right_button'
+  link: 'None'
+'15':
+  length_mm: 37
+  use_rgb_only: True
+  name: 'middle_dialbutton'
+  link: 'None'
+'13':
+  length_mm: 37
+  use_rgb_only: True
+  name: 'left_dial'
+  link: 'None'
 'default':
   length_mm: 24
   use_rgb_only: False
