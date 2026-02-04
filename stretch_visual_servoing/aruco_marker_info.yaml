@@ -31,13 +31,13 @@
   use_rgb_only: True
   name: 'right_button'
   link: 'None'
-'15':
-  length_mm: 37
+'24':
+  length_mm: 19
   use_rgb_only: True
   name: 'middle_dialbutton'
   link: 'None'
-'13':
-  length_mm: 37
+'23':
+  length_mm: 19
   use_rgb_only: True
   name: 'left_dial'
   link: 'None'

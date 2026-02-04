@@ -863,7 +863,7 @@ def main(use_yolo, use_remote_computer, exposure):
                         # break  # Exit the main loop
                         behavior = 'transition_button'
                         # push the movement command and spin in transition button until done
-                        robot.base.translate_by(-1.6) # TODO: check offset (movement from dial to button-- base face away from dial)
+                        robot.base.translate_by(-0.16) # TODO: check offset (movement from dial to button-- base face away from dial)
                         robot.push_command()
                         robot.wait_command()
 
@@ -925,12 +925,14 @@ def main(use_yolo, use_remote_computer, exposure):
                 if prev_behavior != 'transition_button':
                     prev_behavior = behavior
                     tb_spin_count = 0
+                    print(f"tb_spin_count: {tb_spin_count}")
                 else:
                     tb_spin_count += 1
+                    print(f"tb_spint: {tb_spin_count}")
 
-                if tb_spin_count > 120:
-                    # switch state after ~8 seconds, should be way more than enough time
-                    behavior = 'lock'
+                if tb_spin_count > 15:
+                    # switch state after ~3 seconds, should be way more than enough time
+                    behavior = 'reach'
                     dial_turned = True
 
 
