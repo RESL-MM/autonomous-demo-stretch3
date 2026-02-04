@@ -132,11 +132,11 @@ max_gripper_length = 0.26
 overall_visual_servoing_velocity_scale = 1.0
 
 joint_visual_servoing_velocity_scale = {
-    'base_counterclockwise' : 4.0,
-    'lift_up' : 6.0,
-    'arm_out' : 6.0,
-    'wrist_yaw_counterclockwise' : 4.0,
-    'wrist_pitch_up' : 6.0,
+    'base_counterclockwise' : 1.0,
+    'lift_up' : 2.0,
+    'arm_out' : 2.0,
+    'wrist_yaw_counterclockwise' : 2.0,
+    'wrist_pitch_up' : 2.0,
     'wrist_roll_counterclockwise': 1.0,
     'gripper_open' : 1.0
 }
