@@ -12,7 +12,9 @@ from yaml.loader import SafeLoader
 from scipy.spatial.transform import Rotation
 from hello_helpers import hello_misc as hm
 import argparse
+import zmq
 import loop_timer as lt
+import yolo_networking as yn
 from stretch_body import robot_params
 from stretch_body import hello_utils as hu
 
@@ -63,16 +65,31 @@ print_timing = True
 stop_if_toy_not_detected_this_many_frames = 10 #4 #1
 stop_if_fingers_not_detected_this_many_frames = 10 #4 #1
 
-# Lock behavior parameters
-lock_wrist_rotation_rad = np.pi / 4  # 45 degrees counterclockwise
-lock_error_threshold = 0.01  # 25 cm - if we were this close before losing detection, proceed to lock
-
 max_retract_state_count = 60
 
 # Defines a deadzone for mobile base rotation, since low values can
 # lead to no motion and noises on some surfaces like carpets.
 min_base_speed = 0.05
 
+####################################
+## Control Loop Frequency Regulation
+
+# Target control loop rate used when receiving task-relevant
+# information from an external process, instead of directly acquiring
+# images from the D405. Directly acquiring images uses a blocking call
+# and the D405 provides images at a consistent rate, which regulates
+# the control loop. Receiving task-relevant information from an
+# external process uses nonblocking polling of communications that can
+# be highly variable due to communication and computation timing. The
+# polling timeout is set automatically in an attempt to approximate
+# this target control loop frequency.
+target_control_loop_rate_hz = 15
+# Proportional gain used to regulate the polling timeout to achieve the target frequency
+timeout_proportional_gain = 0.1
+# How much history to consider when regulating the polling timeout.
+seconds_of_timing_history = 1
+
+####################################
 
 ## Grasp Parameters
 
@@ -80,7 +97,7 @@ min_base_speed = 0.05
 toy_depth_m = 0.055
 toy_width_m = 0.0542
 
-grasp_if_error_below_this = 0.008
+grasp_if_error_below_this = 0.02
 
 # Find a way to make the gripper faster? These are the maximum
 # available velocities.
@@ -102,7 +119,7 @@ max_toy_z_for_default_fingertips = 0.12
 ####################################
 ## Gains for Reach Behavior
 
-max_distance_for_attempted_reach = 1.0
+max_distance_for_attempted_reach = 0.5
 
 arm_retraction_speedup = 5.0
 
@@ -111,11 +128,11 @@ max_gripper_length = 0.26
 overall_visual_servoing_velocity_scale = 1.0
 
 joint_visual_servoing_velocity_scale = {
-    'base_counterclockwise' : 1.0,
-    'lift_up' : 1.0,
-    'arm_out' : 2.0,
-    'wrist_yaw_counterclockwise' : 1.0,
-    'wrist_pitch_up' : 1.0,
+    'base_counterclockwise' : 4.0,
+    'lift_up' : 6.0,
+    'arm_out' : 6.0,
+    'wrist_yaw_counterclockwise' : 4.0,
+    'wrist_pitch_up' : 6.0,
     'wrist_roll_counterclockwise': 1.0,
     'gripper_open' : 1.0
 }
@@ -129,7 +146,7 @@ joint_state_center = {
     'wrist_yaw_pos': 0.0,
     'wrist_pitch_pos': 0.0, #-0.6
     'wrist_roll_pos': 0.0,
-    'gripper_pos': 0
+    'gripper_pos': 10.46
 }
 
 ####################################
@@ -184,6 +201,97 @@ pos_to_vel_cmd = {
 
 vel_cmd_to_pos = { v:k for (k,v) in pos_to_vel_cmd.items() }
 
+####################################
+
+class RegulatePollTimeout:
+    def __init__(self, target_control_loop_rate_hz, seconds_of_timing_history, timeout_proportional_gain, debug_on=False):
+
+        self.debug_on = debug_on
+        self.target_control_loop_rate_hz = target_control_loop_rate_hz
+        self.seconds_of_timing_history = seconds_of_timing_history
+        self.timeout_proportional_gain = timeout_proportional_gain
+
+        self.target_control_loop_period_ms = 1000.0 * (1.0/self.target_control_loop_rate_hz)
+        self.initial_timeout_for_socket_poll_ms = self.target_control_loop_period_ms
+        self.timeout_for_socket_poll_ms = self.target_control_loop_period_ms
+        
+        self.recent_polling_durations_max_length = self.seconds_of_timing_history * int(round(self.target_control_loop_rate_hz))
+        self.recent_non_polling_durations_max_length = self.seconds_of_timing_history * int(round(self.target_control_loop_rate_hz))
+        
+        self.time_before_socket_poll = None
+        self.prev_time_before_socket_poll = None
+        self.time_after_socket_poll = None
+        self.prev_time_after_socket_poll = None
+        
+        self.recent_polling_durations = []
+        self.recent_non_polling_durations = []
+        
+    def run_after_polling(self):
+        self.prev_time_after_socket_poll = self.time_after_socket_poll
+        self.time_after_socket_poll = time.time()
+
+    def get_poll_timeout(self): 
+        # When obtaining task-relevant information via a
+        # socket, the required processing should be low. Only
+        # robot communication is likely to take significant
+        # time. Consequently, the timeout for polling is
+        # expected to represent a majority of the period for
+        # the control loop. This attempts to select a polling
+        # timeout that will result in the control loop being
+        # close to the target frequency. Ultimately,
+        # performance will depend on the rate at which
+        # task-relevant information is received, but motor
+        # control behavior will be more consistent.
+        
+        self.prev_time_before_socket_poll = self.time_before_socket_poll
+        self.time_before_socket_poll = time.time()
+        
+        mean_polling_duration_ms = None
+        mean_non_polling_duration_ms = None
+
+        if self.debug_on: 
+            print('--------------------------------------------------')
+            print('RegulatePollTimeout: get_poll_timeout()')
+            print('self.initial_timeout_for_socket_poll_ms =', self.initial_timeout_for_socket_poll_ms)
+        
+        if (self.time_after_socket_poll is not None) and (self.prev_time_before_socket_poll is not None):
+            self.recent_polling_durations.append(self.time_after_socket_poll - self.prev_time_before_socket_poll)
+            if len(self.recent_polling_durations) > self.recent_polling_durations_max_length:
+                self.recent_polling_durations.pop(0)
+            mean_polling_duration_ms = 1000.0 * np.mean(np.array(self.recent_polling_durations))
+            if self.debug_on: 
+                print('mean_polling_duration_ms =', mean_polling_duration_ms)
+
+        if (self.time_after_socket_poll is not None) and (self.time_before_socket_poll is not None):
+            self.recent_non_polling_durations.append(self.time_before_socket_poll - self.time_after_socket_poll)                   
+            if len(self.recent_non_polling_durations) > self.recent_non_polling_durations_max_length:
+                self.recent_non_polling_durations.pop(0)
+            mean_non_polling_duration_ms = 1000.0 * np.mean(np.array(self.recent_non_polling_durations))
+            if self.debug_on: 
+                print('mean_non_polling_duration_ms =', mean_non_polling_duration_ms)
+
+        if (mean_polling_duration_ms is not None) and (mean_non_polling_duration_ms is not None):
+            mean_full_duration_ms = mean_polling_duration_ms + mean_non_polling_duration_ms
+            full_duration_error_ms = self.target_control_loop_period_ms - mean_full_duration_ms
+            self.timeout_for_socket_poll_ms = self.timeout_for_socket_poll_ms + (self.timeout_proportional_gain * full_duration_error_ms)
+
+            if self.debug_on: 
+                print('self.target_control_loop_perios_ms =', self.target_control_loop_period_ms)
+                print('mean_full_duration_ms =', mean_full_duration_ms)
+                print('full_duration_error_ms =', full_duration_error_ms)
+                print('self.timeout_proportional_gain =', self.timeout_proportional_gain)
+                print('self.timeout_for_socket_poll_ms =', self.timeout_for_socket_poll_ms)
+
+        timeout_for_socket_poll_ms_int = int(round(self.timeout_for_socket_poll_ms))
+        if timeout_for_socket_poll_ms_int <= 0:
+            timeout_for_socket_poll_ms_int = 1
+
+        if self.debug_on: 
+            print('timeout_for_socket_poll_ms_int =', timeout_for_socket_poll_ms_int)
+            print('--------------------------------------------------')
+        return timeout_for_socket_poll_ms_int
+
+
 def recenter_robot(robot):
     pan = np.pi/2.0
     tilt = -np.pi/2.0
@@ -200,12 +308,8 @@ def recenter_robot(robot):
     robot.arm.move_to(joint_state_center['arm_pos'])
     robot.push_command()
     robot.wait_command()
-    
-    robot.end_of_arm.get_joint('wrist_roll').move_to(joint_state_center['wrist_roll_pos'])
-    robot.push_command()
-    robot.wait_command()
-    
-    robot.lift.move_to(1.00)
+
+    robot.lift.move_to(joint_state_center['lift_pos'])
     robot.push_command()
     robot.wait_command()
 
@@ -214,7 +318,7 @@ def recenter_robot(robot):
     robot.wait_command()
         
 
-def main(exposure):
+def main(use_yolo, use_remote_computer, exposure):
     try:
         
         robot = rb.Robot()
@@ -223,14 +327,34 @@ def main(exposure):
         controller = nvc.NormalizedVelocityControl(robot)
         controller.reset_base_odometry()
 
-        marker_info = {}
-        with open('aruco_marker_info.yaml') as f:
-            marker_info = yaml.load(f, Loader=SafeLoader)
+        if not use_yolo: 
+            marker_info = {}
+            with open('aruco_marker_info.yaml') as f:
+                marker_info = yaml.load(f, Loader=SafeLoader)
 
-        detect_ball_on = False
-        detect_aruco_toy_on = True
-        aruco_detector = ad.ArucoDetector(marker_info=marker_info, show_debug_images=True, use_apriltag_refinement=False, brighten_images=True)
-        aruco_to_fingertips = af.ArucoToFingertips(default_height_above_mounting_surface=af.suctioncup_height['cup_bottom'])
+            detect_ball_on = False
+            detect_aruco_toy_on = True
+            aruco_detector = ad.ArucoDetector(marker_info=marker_info, show_debug_images=True, use_apriltag_refinement=False, brighten_images=True)
+            aruco_to_fingertips = af.ArucoToFingertips(default_height_above_mounting_surface=af.suctioncup_height['cup_bottom'])
+        else:
+            yolo_context = zmq.Context()
+            yolo_socket = yolo_context.socket(zmq.SUB)
+            yolo_socket.setsockopt(zmq.SUBSCRIBE, b'')
+            yolo_socket.setsockopt(zmq.SNDHWM, 1)
+            yolo_socket.setsockopt(zmq.RCVHWM, 1)
+            yolo_socket.setsockopt(zmq.CONFLATE, 1)
+
+            if use_remote_computer:
+                yolo_address = 'tcp://' + yn.remote_computer_ip + ':' + str(yn.yolo_port)
+            else:
+                yolo_address = 'tcp://' + '127.0.0.1' + ':' + str(yn.yolo_port)
+
+            yolo_socket.connect(yolo_address)
+
+            regulate_socket_poll = RegulatePollTimeout(target_control_loop_rate_hz,
+                                                       seconds_of_timing_history,
+                                                       timeout_proportional_gain,
+                                                       debug_on=False)
 
         first_frame = True
 
@@ -238,13 +362,13 @@ def main(exposure):
         prev_behavior = 'reach'
         grasping_the_target = False
         pre_reach = True
-        last_target_error = None  # Track the last known target error before detection was lost
 
         # Assume that the gripper starts out fully opened
         distance_between_fingertips = distance_between_fully_open_fingertips
         prev_distance_between_fingertips = distance_between_fully_open_fingertips
 
-        pipeline, profile = dh.start_d405(exposure)
+        if not use_yolo:
+            pipeline, profile = dh.start_d405(exposure)
 
         frames_since_toy_detected = 0
         frames_since_fingers_detected = 0
@@ -262,61 +386,65 @@ def main(exposure):
             between_fingertips = None
             distance_between_fingertips = None
             
-            frames = pipeline.wait_for_frames()
-            depth_frame = frames.get_depth_frame()
-            color_frame = frames.get_color_frame()
-            if (not depth_frame) or (not color_frame):
-                continue
+            if not use_yolo:
+                frames = pipeline.wait_for_frames()
+                depth_frame = frames.get_depth_frame()
+                color_frame = frames.get_color_frame()
+                if (not depth_frame) or (not color_frame):
+                    continue
 
-            if first_frame:
-                depth_scale = dh.get_depth_scale(profile)
-                print('depth_scale =', depth_scale)
-                print()
+                if first_frame:
+                    depth_scale = dh.get_depth_scale(profile)
+                    print('depth_scale =', depth_scale)
+                    print()
 
-                depth_camera_info = dh.get_camera_info(depth_frame)
-                color_camera_info = dh.get_camera_info(color_frame)
-                camera_info = depth_camera_info
-                #camera_info = color_camera_info
-                print_camera_info = True
-                if print_camera_info: 
-                    for camera_info, name in [(depth_camera_info, 'depth'), (color_camera_info, 'color')]:
-                        print(name + ' camera_info:')
-                        print(camera_info)
-                        print()
+                    depth_camera_info = dh.get_camera_info(depth_frame)
+                    color_camera_info = dh.get_camera_info(color_frame)
+                    camera_info = depth_camera_info
+                    #camera_info = color_camera_info
+                    print_camera_info = True
+                    if print_camera_info: 
+                        for camera_info, name in [(depth_camera_info, 'depth'), (color_camera_info, 'color')]:
+                            print(name + ' camera_info:')
+                            print(camera_info)
+                            print()
 
-                first_frame = False
-                
-            depth_image = np.asanyarray(depth_frame.get_data())
-            color_image = np.asanyarray(color_frame.get_data())
-            image = np.copy(color_image)
+                    first_frame = False
+                    
+                depth_image = np.asanyarray(depth_frame.get_data())
+                color_image = np.asanyarray(color_frame.get_data())
+                image = np.copy(color_image)
 
-            if detect_aruco_toy_on:                                                         
-                aruco_detector.update(color_image, camera_info)                             
-                markers = aruco_detector.get_detected_marker_dict()                         
-                fingertips = aruco_to_fingertips.get_fingertips(markers)                    
-                                                                                            
-                button_left_pos = None    
-                button_left_z_axis = None                                                  
-                button_right_pos = None
-                button_right_z_axis = None                                                     
-                for k in markers:                                                           
-                    m = markers[k]                                                          
-                    name = m['info']['name']                                                
-                    if name == 'button_left':                                               
-                        button_left_pos = m['pos']
-                        button_left_z_axis = m['z_axis']                                          
-                    elif name == 'button_right':                                            
-                        button_right_pos = m['pos']       
-                        button_right_z_axis = m['z_axis']                                  
-                                                                                            
-                # Calculate midpoint if both markers detected                               
-                if button_left_pos is not None and button_right_pos is not None: 
-                    # TODO: need to normalize Z axis?           
-                    toy_target = ((button_left_pos + button_right_pos) / 2.0) + ((button_left_z_axis + button_right_z_axis) / 2.0) * 0.1 
+                if detect_aruco_toy_on:
+                    aruco_detector.update(color_image, camera_info)
+                    markers = aruco_detector.get_detected_marker_dict()
+                    fingertips = aruco_to_fingertips.get_fingertips(markers)
+                    for k in markers:
+                        m = markers[k]
+                        name = m['info']['name']
+                        if name == 'toy':
+                            toy_target = m['pos'] - (toy_depth_m/2.0 * m['z_axis'])
+                    
+            else:
+                timeout_for_socket_poll_int = regulate_socket_poll.get_poll_timeout()
+                #print('timeout_for_socket_poll_int =', timeout_for_socket_poll_int)
+                poll_results = yolo_socket.poll(timeout=timeout_for_socket_poll_int,
+                                                flags=zmq.POLLIN)
+                if poll_results == zmq.POLLIN:
+                    yolo_results = yolo_socket.recv_pyobj()
+                    #print('yolo_results =', yolo_results)
+                    fingertips = yolo_results.get('fingertips', None)
+                    yolo = yolo_results.get('yolo')
+                    if len(yolo) > 0: 
+                        toy_target = yolo[0]['grasp_center_xyz']
+                regulate_socket_poll.run_after_polling()
 
             print()
 
-            toy_name = 'ArUco Cube'
+            if use_yolo:
+                toy_name = 'Tennis Ball'
+            else:
+                toy_name = 'ArUco Cube'
             if toy_target is None:
                 print(toy_name + ' Detection: FAILED')
             else:
@@ -377,10 +505,9 @@ def main(exposure):
                         grasping_the_target = False
 
             if (between_fingertips is not None) and (toy_target is not None):            
-                TOOL_OFFSET = np.array([0.0, 0.00, 0.00])
-                position_error = toy_target - between_fingertips - TOOL_OFFSET
+
+                position_error = toy_target - between_fingertips
                 target_error = np.linalg.norm(position_error)
-                last_target_error = target_error  # Track for lock behavior
                 print('target_error = {:.2f} cm'.format(100.0 * target_error))
                 if target_error >  lost_ball_target_error_too_large:
                     if grasping_the_target: 
@@ -418,6 +545,79 @@ def main(exposure):
 
                 retract_state_count = retract_state_count + 1
 
+            elif behavior == 'celebrate':
+
+                if prev_behavior != 'celebrate':
+                    celebrate_state_count = 0
+                    pitch_ready = False
+                    yaw_ready = False
+                    ready_to_waggle = False
+                    waggle_count = 0
+
+                prev_behavior = behavior
+
+                with controller.lock:
+                    pitch = joint_state['wrist_pitch_pos']
+                    if abs(pitch - 0.1) <= 0.1:
+                        pitch_ready = True
+
+                    yaw = joint_state['wrist_yaw_pos']
+                    if abs(yaw) <= 0.1:
+                        yaw_ready = True
+
+                    if pitch_ready and yaw_ready:
+                        ready_to_waggle = True
+
+                    if not ready_to_waggle: 
+                        if abs(pitch - 0.1) > 0.05:
+                            pitch_ready = False
+                            robot.end_of_arm.get_joint('wrist_pitch').move_to(0.1)
+                        if abs(yaw) > 0.05:
+                            yaw_ready = False
+                            robot.end_of_arm.get_joint('wrist_yaw').move_to(0.0)
+
+                    if ready_to_waggle:
+                        waggle_direction = int(waggle_count / 4) % 2
+
+                        if waggle_direction == 0:
+                            robot.end_of_arm.get_joint('wrist_yaw').move_by(0.05, v_des=3.0, a_des=10.0)
+                        else:
+                            robot.end_of_arm.get_joint('wrist_yaw').move_by(-0.05, v_des=3.0, a_des=10.0)
+                        waggle_count = waggle_count + 1
+                    robot.push_command()
+
+                if (waggle_count > 16) or (celebrate_state_count > 100):
+                    cmd = zero_vel.copy()
+                    behavior = 'reach'
+                    pre_reach = True
+
+                if not grasping_the_target:
+                    cmd = zero_vel.copy()
+                    behavior = 'disappointed'
+
+                celebrate_state_count = celebrate_state_count + 1
+
+            elif behavior == 'disappointed':
+
+                if prev_behavior != 'disappointed':
+                    disappointed_state_count = 0
+                prev_behavior = behavior
+
+                with controller.lock:
+
+                    pitch = joint_state['wrist_pitch_pos']
+                    if pitch > -1.0:
+                        robot.end_of_arm.get_joint('wrist_pitch').move_to(-0.8, v_des=0.5, a_des=1.0) 
+
+                    robot.push_command() 
+
+                if (disappointed_state_count > 40):
+                    cmd = zero_vel.copy()
+                    behavior = 'reach'
+                    pre_reach = True #False
+
+                disappointed_state_count = disappointed_state_count + 1
+
             elif behavior == 'reach':
 
                 prev_behavior = behavior
@@ -453,9 +653,7 @@ def main(exposure):
                     yaw_velocity = -x_error
                     pitch_velocity = -y_error
 
-                    # Rotate to 45 degrees left (negative) while approaching
-                    target_roll = 0.0 #  -lock_wrist_rotation_rad  # -45 degrees
-                    roll_velocity = target_roll - joint_state['wrist_roll_pos']
+                    roll_velocity =  0.0 - joint_state['wrist_roll_pos']
 
                     # Transform camera frame errors into errors for the Cartesian joints
                     yaw = joint_state['wrist_yaw_pos']
@@ -491,49 +689,32 @@ def main(exposure):
                     }
 
 
-                    # if target_error < grasp_if_error_below_this:
-                    #     cmd['gripper_open'] = 0.0
-
-                    #     if ((not grasping_the_target) and
-                    #         (joint_state['gripper_eff'] < successful_grasp_effort) and
-                    #         (distance_between_fingertips < successful_grasp_max_fingertip_distance) and
-                    #         (distance_between_fingertips > successful_grasp_min_fingertip_distance)):
-                    #         print('I GOT THE BALL!!!')
-                    #         grasping_the_target = True
-                    #         behavior = 'retract'
-                    # else:
-                    #     cmd['gripper_open'] = gripper_open_speed
-
                     if target_error < grasp_if_error_below_this:
-                        # Close enough - transition to lock behavior
-                        cmd = zero_vel.copy()
-                        controller.set_command(cmd)
-                        print('Target reached - transitioning to LOCK behavior')
-                        behavior = 'lock'
+                        cmd['gripper_open'] = -gripper_close_speed
+
+                        if ((not grasping_the_target) and
+                            (joint_state['gripper_eff'] < successful_grasp_effort) and
+                            (distance_between_fingertips < successful_grasp_max_fingertip_distance) and
+                            (distance_between_fingertips > successful_grasp_min_fingertip_distance)):
+                            print('I GOT THE BALL!!!')
+                            grasping_the_target = True
+                            behavior = 'retract'
                     else:
-                        cmd['gripper_open'] = 0.0
+                        cmd['gripper_open'] = gripper_open_speed
 
-                        cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
-                        cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
+                    cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
+                    cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
 
-                        if motion_on:
-                            cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                            cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                            controller.set_command(cmd)
+                    if motion_on:
+                        cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                        cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                        controller.set_command(cmd)
 
                 else:
                     joint_state = controller.get_joint_state()
                     stop_joints = zero_vel.copy()
 
-                    # Check if we should transition to lock behavior
-                    # If we lost detection but were close enough, proceed to lock the knob
-                    if (last_target_error is not None and
-                        last_target_error < lock_error_threshold and
-                        frames_since_toy_detected >= stop_if_toy_not_detected_this_many_frames):
-                        print('Target lost but was close enough - transitioning to LOCK behavior')
-                        behavior = 'lock'
-                        cmd = zero_vel.copy()
-                    elif frames_since_toy_detected >= stop_if_toy_not_detected_this_many_frames:
+                    if frames_since_toy_detected >= stop_if_toy_not_detected_this_many_frames:
                         cmd = stop_joints
                         cmd['gripper_open'] = gripper_open_speed
                     elif frames_since_fingers_detected >= stop_if_fingers_not_detected_this_many_frames:
@@ -547,88 +728,6 @@ def main(exposure):
                         cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                         cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                         controller.set_command(cmd)
-
-            elif behavior == 'lock':
-                # Lock behavior: twist the knob
-                # Phase 1: rotate left 45 degrees
-                # Phase 2: wait 1 second
-                # Phase 3: rotate right 90 degrees
-                # Phase 4: retract arm back
-                if prev_behavior != 'lock':
-                    lock_state_count = 0
-                    lock_initial_roll = joint_state['wrist_roll_pos']
-                    lock_target_roll = -lock_wrist_rotation_rad  # Target is -45 degrees
-                    
-                    # Check if already at target position (should be from reach behavior)
-                    roll_error = abs(lock_target_roll - joint_state['wrist_roll_pos'])
-                    if roll_error < 0.1:  # Within ~6 degrees tolerance
-                        # Already at left position, skip to wait
-                        lock_phase = 'wait'
-                        lock_wait_start = time.time()
-                        print(f'LOCK: Wrist already at {np.degrees(joint_state["wrist_roll_pos"]):.1f} degrees, starting wait phase')
-                    else:
-                        # Need to rotate left first
-                        lock_phase = 'left'
-                        lock_wait_start = None
-                        print(f'LOCK: Phase 1 - Rotating left to {np.degrees(lock_target_roll):.1f} degrees')
-                prev_behavior = behavior
-
-                if lock_phase in ['left', 'wait', 'right']:
-                    with controller.lock:
-                        current_roll = joint_state['wrist_roll_pos']
-
-                        if lock_phase == 'left':
-                            roll_error = abs(lock_target_roll - current_roll)
-                            if roll_error < 0.05:  # Within ~3 degrees tolerance
-                                lock_phase = 'wait'
-                                lock_wait_start = time.time()
-                                print('LOCK: Phase 2 - Waiting 1 second')
-                            else:
-                                robot.end_of_arm.get_joint('wrist_roll').move_to(lock_target_roll, v_des=1.0, a_des=2.0)
-
-                        elif lock_phase == 'wait':
-                            if time.time() - lock_wait_start >= 1.0:
-                                lock_phase = 'right'
-                                # Rotate right to +45 degrees (90 degrees total from -45 to +45)
-                                lock_target_roll = lock_wrist_rotation_rad
-                                print(f'LOCK: Phase 3 - Rotating right to {np.degrees(lock_target_roll):.1f} degrees')
-
-                        elif lock_phase == 'right':
-                            roll_error = abs(lock_target_roll - current_roll)
-                            if roll_error < 0.05:  # Within ~3 degrees tolerance
-                                lock_phase = 'retract'
-                                print('LOCK: Phase 4 - Retracting arm')
-                            else:
-                                robot.end_of_arm.get_joint('wrist_roll').move_to(lock_target_roll, v_des=1.0, a_des=2.0)
-
-                        robot.push_command()
-
-                elif lock_phase == 'retract':
-                    # Retract the arm back
-                    cmd = {
-                        'lift_up': 0.3,
-                        'arm_out': -1.0
-                    }
-                    
-                    # Check if arm is fully retracted
-                    if joint_state['arm_pos'] < (0.02 + min_joint_state['arm_pos']):
-                        lock_phase = 'complete'
-                        print('LOCK: Retraction complete!')
-                        cmd = zero_vel.copy()
-                    
-                    if motion_on and lock_phase == 'retract':
-                        cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                        cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                        controller.set_command(cmd)
-
-                # After lock is complete or timeout, finish the program
-                if lock_phase == 'complete' or lock_state_count > 150:  # ~10 seconds timeout at 15Hz
-                    cmd = zero_vel.copy()
-                    controller.set_command(cmd)
-                    print('LOCK: Behavior complete! Exiting program...')
-                    break  # Exit the main loop
-
-                lock_state_count = lock_state_count + 1
 
             if not use_yolo:
 

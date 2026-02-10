@@ -674,7 +674,7 @@ def main(use_yolo, use_remote_computer, exposure):
 
                     # Rotate to 45 degrees left (negative) while approaching
                     target_roll = -lock_wrist_rotation_rad  # -45 degrees
-                    roll_velocity = target_roll - joint_state['wrist_roll_pos']max_joint_state
+                    roll_velocity = target_roll - joint_state['wrist_roll_pos']
 
                     # Transform camera frame errors into errors for the Cartesian joints
                     yaw = joint_state['wrist_yaw_pos']
