@@ -60,50 +60,44 @@ def get_dxl_joint_limits(joint):
 motion_on = True
 print_timing = True
 
-stop_if_toy_not_detected_this_many_frames = 10 #4 #1
+stop_if_target_not_detected_this_many_frames = 10 #4 #1
 stop_if_fingers_not_detected_this_many_frames = 10 #4 #1
 
-max_retract_state_count = 60
+# Lock behavior parameters
+lock_error_threshold = 0.25  # 25 cm - if we were this close before losing detection, proceed to lock
 
 # Defines a deadzone for mobile base rotation, since low values can
 # lead to no motion and noises on some surfaces like carpets.
 min_base_speed = 0.05
 
-## Grasp Parameters
+####################################
 
-# Toy Cube with ArUco Marker
-toy_depth_m = 0.055
-toy_width_m = 0.0542
+## Button Pressing Parameters
 
-grasp_if_error_below_this = 0.03
+# Target width for display purposes only
+target_width_m = 0.0542
 
-# Find a way to make the gripper faster? These are the maximum
-# available velocities.
+# Distance threshold to trigger button press (lock behavior)
+grasp_if_error_below_this = 0.15
+
+# Gripper speed when opening at start
 gripper_open_speed = 1.0
-gripper_close_speed = 1.0
 
-lost_ball_target_error_too_large = 0.10
-lost_ball_fingertips_too_close = 0.038
-
-successful_grasp_effort = -14.0
-successful_grasp_max_fingertip_distance = 0.085 #0.075 m
-successful_grasp_min_fingertip_distance = 0.05 #0.03 m
-
-# Approximation based on just_touching key statefrom gripper characterization
+# Fallback fingertip position when markers are occluded
 default_between_fingertips = np.array([0.01, 0.035, 0.17])
 distance_between_fully_open_fingertips = 0.16
-max_toy_z_for_default_fingertips = 0.12
+max_target_z_for_default_fingertips = 0.12
 
 ####################################
 ## Gains for Reach Behavior
 
-max_distance_for_attempted_reach = 0.75
+max_distance_for_attempted_reach = 1.0
 
 arm_retraction_speedup = 5.0
 
 max_gripper_length = 0.26
 
-overall_visual_servoing_velocity_scale = 0.2
+overall_visual_servoing_velocity_scale = 1.0
 
 joint_visual_servoing_velocity_scale = {
     'base_counterclockwise' : 4.0,
@@ -111,7 +105,7 @@ joint_visual_servoing_velocity_scale = {
     'arm_out' : 6.0,
     'wrist_yaw_counterclockwise' : 4.0,
     'wrist_pitch_up' : 6.0,
-    'wrist_roll_counterclockwise': 1.0,
+    'wrist_roll_counterclockwise': 0.3,  # Slowed down for dial twisting
     'gripper_open' : 1.0
 }
 
@@ -122,9 +116,9 @@ joint_state_center = {
     'lift_pos' : 0.7,
     'arm_pos': 0.01,
     'wrist_yaw_pos': 0.0,
-    'wrist_pitch_pos': 0.0, #-0.6
+    'wrist_pitch_pos': -0.22, #-0.6
     'wrist_roll_pos': 0.0,
-    'gripper_pos': 10.46
+    'gripper_pos': 0
 }
 
 ####################################
@@ -136,8 +130,8 @@ min_joint_state = {
     'arm_pos': 0.01, #0.03
     'wrist_yaw_pos': -0.20, #-0.25
     'wrist_pitch_pos': -1.2,
-    'wrist_roll_pos': -0.1,
-    'gripper_pos' : 3.5 #3.5 #4.0 #3.0 
+    'wrist_roll_pos': -1.6,  # Allow larger range for dial twisting
+    'gripper_pos' : 3.0 #3.5 #4.0 #3.0 
     }
 
 max_joint_state = {
@@ -146,7 +140,7 @@ max_joint_state = {
     'arm_pos': 0.45,
     'wrist_yaw_pos': 1.0, #0.5
     'wrist_pitch_pos': 0.2, #-0.4
-    'wrist_roll_pos': 0.1,
+    'wrist_roll_pos': 1.6,  # Allow larger range for dial twisting
     'gripper_pos': get_dxl_joint_limits('stretch_gripper')[1] #10.46
     }
 
@@ -179,6 +173,7 @@ pos_to_vel_cmd = {
 
 vel_cmd_to_pos = { v:k for (k,v) in pos_to_vel_cmd.items() }
 
+####################################
 
 def recenter_robot(robot):
     pan = np.pi/2.0
@@ -188,23 +183,27 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
 
-    robot.end_of_arm.get_joint('wrist_yaw').move_to(joint_state_center['wrist_yaw_pos'])
-    robot.end_of_arm.get_joint('wrist_pitch').move_to(joint_state_center['wrist_pitch_pos'])
-    robot.push_command()
-    robot.wait_command()
 
     robot.arm.move_to(joint_state_center['arm_pos'])
     robot.push_command()
     robot.wait_command()
-
-    #robot.lift.move_to(joint_state_center['lift_pos'])
-    robot.lift.move_to(1.05)
+    
+    robot.end_of_arm.get_joint('wrist_yaw').move_to(joint_state_center['wrist_yaw_pos'])
+    robot.end_of_arm.get_joint('wrist_pitch').move_to(joint_state_center['wrist_pitch_pos'])
+    robot.push_command()
+    robot.wait_command()
+    
+    robot.end_of_arm.get_joint('wrist_roll').move_to(joint_state_center['wrist_roll_pos'])
+    robot.push_command()
+    robot.wait_command()
+    
+    robot.lift.move_to(1.02)
     robot.push_command()
     robot.wait_command()
 
-    robot.end_of_arm.get_joint('stretch_gripper').move_to(joint_state_center['gripper_pos'])
-    robot.push_command()
-    robot.wait_command()
+    # robot.end_of_arm.get_joint('stretch_gripper').move_to(joint_state_center['gripper_pos'])
+    # robot.push_command()
+    # robot.wait_command()
         
 
 def main(exposure):
@@ -220,6 +219,7 @@ def main(exposure):
         with open('aruco_marker_info.yaml') as f:
             marker_info = yaml.load(f, Loader=SafeLoader)
 
+        detect_aruco_button_on = True
         aruco_detector = ad.ArucoDetector(marker_info=marker_info, show_debug_images=True, use_apriltag_refinement=False, brighten_images=True)
         aruco_to_fingertips = af.ArucoToFingertips(default_height_above_mounting_surface=af.suctioncup_height['cup_bottom'])
 
@@ -227,8 +227,8 @@ def main(exposure):
 
         behavior = 'reach'
         prev_behavior = 'reach'
-        grasping_the_target = False
         pre_reach = True
+        last_target_error = None  # Track the last known target error before detection was lost
 
         # Assume that the gripper starts out fully opened
         distance_between_fingertips = distance_between_fully_open_fingertips
@@ -236,7 +236,7 @@ def main(exposure):
 
         pipeline, profile = dh.start_d405(exposure)
 
-        frames_since_toy_detected = 0
+        frames_since_target_detected = 0
         frames_since_fingers_detected = 0
             
         loop_timer = lt.LoopTimer()
@@ -280,41 +280,32 @@ def main(exposure):
             color_image = np.asanyarray(color_frame.get_data())
             image = np.copy(color_image)
 
-            # Get the position of the tag in camera frame coordinates
-            aruco_detector.update(color_image, camera_info)
-            markers = aruco_detector.get_detected_marker_dict()
-            fingertips = aruco_to_fingertips.get_fingertips(markers)
-            
-            
-            dial_left_pos = None    
-            dial_left_z = None                                                  
-            dial_right_pos = None
-            dial_right_z = None                                                     
-            for k in markers:                                                           
-                m = markers[k]                                                          
-                name = m['info']['name']                                                
-                if name == 'left_dial':                                               
-                    dial_left_pos = m['pos']
-                    dial_left_z = m['z_axis']                                          
-                elif name == 'middle_dialbutton':                                            
-                    dial_right_pos = m['pos']       
-                    dial_right_z = m['z_axis']                                  
-                                                                                        
-            # find the midpoint of the dial tags and calculate the target positon relative to the CAD tool                               
-            if dial_left_pos is not None and dial_right_pos is not None: 
-                dial_unit_z = (dial_left_z + dial_right_z)
-                dial_unit_z = dial_unit_z/np.linalg.norm(dial_unit_z)
-                print(f"dlp: {dial_left_pos}\ndrp: {dial_right_pos}\ndbz: {dial_unit_z}")
-                toy_target = ((dial_left_pos + dial_right_pos) / 2.0) + np.array([0.0,0.0,-0.07])
-                print(toy_target)
+            if detect_aruco_button_on:                                                         
+                aruco_detector.update(color_image, camera_info)                             
+                markers = aruco_detector.get_detected_marker_dict()                         
+                fingertips = aruco_to_fingertips.get_fingertips(markers)                    
+                                                                                            
+                tag_23_pos = None                                                      
+                tag_24_pos = None                                                     
+                for k in markers:                                                           
+                    m = markers[k]                                                          
+                    name = m['info']['name']                                                
+                    if name == 'left_dial':  # Tag 23                                               
+                        tag_23_pos = m['pos']                                          
+                    elif name == 'middle_dialbutton':  # Tag 24                                            
+                        tag_24_pos = m['pos']                                         
+                                                                                            
+                # Calculate midpoint if both markers detected (tag 23 on left, tag 24 on right)                               
+                if tag_23_pos is not None and tag_24_pos is not None:            
+                    toy_target = (tag_23_pos + tag_24_pos) / 2.0   
 
             print()
 
-            toy_name = 'ArUco Cube'
+            target_name = 'Dial Target (Tags 23 & 24)'
             if toy_target is None:
-                print(toy_name + ' Detection: FAILED')
+                print(target_name + ' Detection: FAILED')
             else:
-                print(toy_name + ' Detection: SUCCEEDED')
+                print(target_name + ' Detection: SUCCEEDED')
  
             fingertip_left_pose = None
             fingertip_right_pose = None
@@ -337,10 +328,10 @@ def main(exposure):
                 prev_distance_between_fingertips = distance_between_fingertips
                 distance_between_fingertips = np.linalg.norm(fingertip_left_pos - fingertip_right_pos)
             elif toy_target is not None:
-                # The toy is so close to the camera that the finger
+                # The target is so close to the camera that the finger
                 # markers might be occluded, so hallucinate the between
                 # fingers position to enhance retraction performance.
-                if toy_target[2] < max_toy_z_for_default_fingertips:
+                if toy_target[2] < max_target_z_for_default_fingertips:
                     between_fingertips = default_between_fingertips
                     distance_between_fingertips = prev_distance_between_fingertips
 
@@ -354,30 +345,25 @@ def main(exposure):
                 print('distance_between_fingertips = {:.2f} cm'.format(100.0 * distance_between_fingertips))
 
             if toy_target is not None:
-                frames_since_toy_detected = 0
+                frames_since_target_detected = 0
             else:
-                frames_since_toy_detected = frames_since_toy_detected + 1
+                frames_since_target_detected = frames_since_target_detected + 1
 
             if between_fingertips is not None:
                 frames_since_fingers_detected = 0
             else: 
                 frames_since_fingers_detected = frames_since_fingers_detected + 1
-            print('grasping_the_target =', grasping_the_target)
 
-            if (between_fingertips is not None) and (toy_target is not None):
-                # TODO: adjust tool offsets            
-                # TOOL_OFFSET = np.array([0.0, 0.02, -0.025])
-                TOOL_OFFSET = np.array([0.0, 0.0, 0.0])
-                position_error = toy_target - between_fingertips - TOOL_OFFSET # AC = AB + AC => -AC = -AB - AC
-                print(f"pos err: {position_error}")
+            if (between_fingertips is not None) and (toy_target is not None):            
+                position_error = toy_target - between_fingertips
                 target_error = np.linalg.norm(position_error)
+                last_target_error = target_error  # Track for lock behavior
                 print('target_error = {:.2f} cm'.format(100.0 * target_error))
 
             print('behavior =', behavior)
             print('pre_reach =', pre_reach)
-
+                        
             if behavior == 'reach':
-
                 prev_behavior = behavior
 
                 if pre_reach:
@@ -387,7 +373,7 @@ def main(exposure):
                     if joint_state['gripper_pos'] >= (0.9 * max_joint_state['gripper_pos']):
                         gripper_ready = True
                         cmd['gripper_open'] = 0.0
-                    elif not grasping_the_target:
+                    else:
                         cmd['gripper_open'] = gripper_open_speed
 
                     cmd['wrist_pitch_up'] = 0.0
@@ -408,12 +394,16 @@ def main(exposure):
 
                     x_error, y_error, z_error = position_error
 
-                    # TODO: implement yaw correction via base movement
-                    # yaw_velocity = -x_error
-                    yaw_velocity = 0.0
-                    pitch_velocity = -y_error
+                    # Keep wrist yaw stable at 0 degrees instead of servoing
+                    yaw_velocity = 0.0 - joint_state['wrist_yaw_pos']
+                    
+                    # Keep wrist pitch fixed at -0.2 radians during approach
+                    target_pitch = -0.22
+                    pitch_velocity = target_pitch - joint_state['wrist_pitch_pos']
 
-                    roll_velocity =  0.0 # lock wrist roll rotation while going to targety
+                    # Keep wrist roll stable at 0 degrees during approach
+                    target_roll = 0.0
+                    roll_velocity = target_roll - joint_state['wrist_roll_pos']
 
                     # Transform camera frame errors into errors for the Cartesian joints
                     yaw = joint_state['wrist_yaw_pos']
@@ -440,7 +430,7 @@ def main(exposure):
                         arm_velocity = arm_retraction_speedup * arm_velocity
 
                     cmd = {
-                        'lift_up' : lift_velocity,
+                        'lift_up' : 0.0,  # Disabled to keep tags in view
                         'arm_out' : arm_velocity,
                         'wrist_yaw_counterclockwise' : yaw_velocity,
                         'wrist_pitch_up' : pitch_velocity,
@@ -448,26 +438,36 @@ def main(exposure):
                         'base_counterclockwise' : base_rotational_velocity
                     }
 
-
                     if target_error < grasp_if_error_below_this:
+                        # Close enough - transition to lock behavior
                         cmd = zero_vel.copy()
                         controller.set_command(cmd)
+                        print('Target reached - transitioning to LOCK behavior')
+                        behavior = 'lock'
                     else:
-                        cmd['gripper_open'] = gripper_open_speed
+                        cmd['gripper_open'] = 0.0
 
-                    cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
-                    cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
+                        cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
+                        cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
 
-                    if motion_on:
-                        cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                        cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                        controller.set_command(cmd)
+                        if motion_on:
+                            cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                            cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                            controller.set_command(cmd)
 
                 else:
                     joint_state = controller.get_joint_state()
                     stop_joints = zero_vel.copy()
 
-                    if frames_since_toy_detected >= stop_if_toy_not_detected_this_many_frames:
+                    # Check if we should transition to lock behavior
+                    # If we lost detection but were close enough, proceed to lock the button
+                    if (last_target_error is not None and
+                        last_target_error < lock_error_threshold and
+                        frames_since_target_detected >= stop_if_target_not_detected_this_many_frames):
+                        print('Target lost but was close enough - transitioning to LOCK behavior')
+                        behavior = 'lock'
+                        cmd = zero_vel.copy()
+                    elif frames_since_target_detected >= stop_if_target_not_detected_this_many_frames:
                         cmd = stop_joints
                         cmd['gripper_open'] = gripper_open_speed
                     elif frames_since_fingers_detected >= stop_if_fingers_not_detected_this_many_frames:
@@ -482,11 +482,134 @@ def main(exposure):
                         cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                         controller.set_command(cmd)
 
+            elif behavior == 'lock':
+                # Lock behavior: rotate CCW 45°, extend arm, hold 5s, rotate CW 90°, restore
+                if prev_behavior != 'lock':
+                    lock_state_count = 0
+                    lock_phase = 'rotating_ccw'
+                    initial_arm_pos = None
+                    lock_hold_count = 0
+                    print('LOCK: Target reached! Rotating counter-clockwise 45 degrees...')
+                prev_behavior = behavior
+
+                # Hold for 5 seconds (75 iterations at 15Hz)
+                hold_duration = 75  # 5 seconds at 15Hz
+                
+                if lock_phase == 'rotating_ccw':
+                    # Rotate wrist counter-clockwise 45 degrees (-0.785 radians)
+                    target_roll = -0.785  # Counter-clockwise 45 degrees
+                    roll_error = target_roll - joint_state['wrist_roll_pos']
+                    
+                    # Check if rotation is complete (within 0.05 radians ~3 degrees)
+                    if abs(roll_error) < 0.05:
+                        print('LOCK: CCW rotation complete! Extending arm...')
+                        lock_phase = 'extending'
+                        initial_arm_pos = joint_state['arm_pos']
+                        cmd = zero_vel.copy()
+                        controller.set_command(cmd)
+                    else:
+                        # Apply velocity to rotate wrist
+                        cmd = zero_vel.copy()
+                        cmd['wrist_roll_counterclockwise'] = roll_error
+                        
+                        cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
+                        cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
+                        
+                        if motion_on:
+                            cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                            cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                            controller.set_command(cmd)
+                
+                elif lock_phase == 'extending':
+                    # Extend arm by 0.03 meters (3 cm)
+                    if initial_arm_pos is None:
+                        initial_arm_pos = joint_state['arm_pos']
+                    
+                    target_arm_pos = initial_arm_pos + 0.02  # Extend 3cm
+                    arm_error = target_arm_pos - joint_state['arm_pos']
+                    
+                    # Check if extension is complete (within 0.005m = 5mm)
+                    if abs(arm_error) < 0.005:
+                        print('LOCK: Arm extension complete! Holding for 5 seconds...')
+                        lock_phase = 'holding'
+                        lock_hold_count = 0
+                        cmd = zero_vel.copy()
+                        controller.set_command(cmd)
+                    else:
+                        # Apply velocity to extend arm
+                        cmd = zero_vel.copy()
+                        cmd['arm_out'] = arm_error * 2.0  # Gentle extension
+                        
+                        cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
+                        cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
+                        
+                        if motion_on:
+                            cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                            cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                            controller.set_command(cmd)
+                
+                elif lock_phase == 'holding':
+                    if lock_hold_count < hold_duration:
+                        # Hold position by applying zero velocity
+                        cmd = zero_vel.copy()
+                        controller.set_command(cmd)
+                        
+                        if lock_hold_count % 15 == 0:  # Print every second
+                            seconds_remaining = (hold_duration - lock_hold_count) // 15
+                            print(f'LOCK: Holding... {seconds_remaining} seconds remaining')
+                        
+                        lock_hold_count += 1
+                    else:
+                        lock_phase = 'rotating_cw'
+                        print('LOCK: Hold complete! Rotating wrist clockwise 90 degrees...')
+                
+                elif lock_phase == 'rotating_cw':
+                    # Rotate wrist clockwise 90 degrees (from -0.785 to +0.785 radians)
+                    target_roll = 0.785  # Clockwise 90 degrees from -45° position
+                    roll_error = target_roll - joint_state['wrist_roll_pos']
+                    
+                    # Check if rotation is complete (within 0.05 radians ~3 degrees)
+                    if abs(roll_error) < 0.05:
+                        print('LOCK: CW rotation complete! Restoring pose...')
+                        lock_phase = 'restoring'
+                        cmd = zero_vel.copy()
+                        controller.set_command(cmd)
+                    else:
+                        # Apply velocity to rotate wrist
+                        cmd = zero_vel.copy()
+                        cmd['wrist_roll_counterclockwise'] = roll_error
+                        
+                        cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
+                        cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
+                        
+                        if motion_on:
+                            cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                            cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                            controller.set_command(cmd)
+                
+                elif lock_phase == 'restoring':
+                    # Stop the controller and restore pose using recenter_robot
+                    cmd = zero_vel.copy()
+                    controller.set_command(cmd)
+                    print('LOCK: Restoring robot to initial pose...')
+                    recenter_robot(robot)
+                    print('LOCK: Pose restored! Exiting program...')
+                    break  # Exit the main loop
+
+                # Timeout safety (extended to account for all phases)
+                if lock_state_count > 300:  # ~20 seconds timeout at 15Hz
+                    cmd = zero_vel.copy()
+                    controller.set_command(cmd)
+                    print('LOCK: Timeout! Exiting program...')
+                    break
+
+                lock_state_count = lock_state_count + 1
+
             if toy_target is not None:
-                # draw blue circle for the toy target position
+                # draw blue circle for the button target position
                 draw_origin(image, camera_info, toy_target, (255, 0, 0))
                 x,y,z = toy_target * 100.0
-                width = toy_width_m
+                width = target_width_m
                 text_lines = [
                     "{:.1f} cm wide".format(width*100.0),
                     "{:.1f}, {:.1f}, {:.1f} cm".format(x,y,z)
@@ -501,11 +624,11 @@ def main(exposure):
 
             
             aruco_to_fingertips.draw_fingertip_frames(fingertips,
-                                                        image,
-                                                        camera_info,
-                                                        axis_length_in_m=0.02,
-                                                        draw_origins=True,
-                                                        write_coordinates=True)
+                                                      image,
+                                                      camera_info,
+                                                      axis_length_in_m=0.02,
+                                                      draw_origins=True,
+                                                      write_coordinates=True)
             
 
             
@@ -527,10 +650,9 @@ if __name__ == '__main__':
 
     
     parser = argparse.ArgumentParser(
-        prog='Stretch 3 Visual Servoing Demo',
-        description='This application provides a demonstration of interactive grasping using visual servoing and the gripper-mounted D405.',
+        prog='Stretch 3 Dial Twisting Demo',
+        description='This application demonstrates dial twisting using visual servoing with ArUco markers (tags 23 & 24) and the gripper-mounted D405.',
     )
-
     parser.add_argument('-e', '--exposure', action='store', type=str, default='low', help=f'Set the D405 exposure to {dh.exposure_keywords} or an integer in the range {dh.exposure_range}') 
             
     
