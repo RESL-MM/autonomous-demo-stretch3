@@ -196,7 +196,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_to(1.02)
+    robot.lift.move_to(0.97)
     robot.push_command()
     robot.wait_command()
 

@@ -105,7 +105,7 @@ joint_visual_servoing_velocity_scale = {
     'arm_out' : 6.0,
     'wrist_yaw_counterclockwise' : 4.0,
     'wrist_pitch_up' : 6.0,
-    'wrist_roll_counterclockwise': 0.3,  # Slowed down for dial twisting
+    'wrist_roll_counterclockwise': 0.25,  # Slowed down for dial twisting
     'gripper_open' : 1.0
 }
 
@@ -197,7 +197,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_to(1.02)
+    robot.lift.move_to(1.03)
     robot.push_command()
     robot.wait_command()
 
@@ -483,21 +483,32 @@ def main(exposure):
                         controller.set_command(cmd)
 
             elif behavior == 'lock':
-                # Lock behavior: rotate CCW 45°, extend arm, hold 5s, rotate CW 90°, restore
+                # Lock behavior: rotate CCW 50°, extend arm, hold 5s, rotate CW 100°, restore
                 if prev_behavior != 'lock':
                     lock_state_count = 0
                     lock_phase = 'rotating_ccw'
                     initial_arm_pos = None
                     lock_hold_count = 0
-                    print('LOCK: Target reached! Rotating counter-clockwise 45 degrees...')
+                    print('LOCK: Target reached! Rotating counter-clockwise 50 degrees...')
                 prev_behavior = behavior
+
+                # Safety check - ensure lock_phase is defined
+                if 'lock_phase' not in locals():
+                    print('WARNING: lock_phase not defined, initializing...')
+                    lock_phase = 'rotating_ccw'
+                    lock_state_count = 0
+                    initial_arm_pos = None
+                    lock_hold_count = 0
+
+                # Debug output
+                print(f'LOCK: Phase = {lock_phase}, Count = {lock_state_count}')
 
                 # Hold for 5 seconds (75 iterations at 15Hz)
                 hold_duration = 75  # 5 seconds at 15Hz
                 
                 if lock_phase == 'rotating_ccw':
-                    # Rotate wrist counter-clockwise 45 degrees (-0.785 radians)
-                    target_roll = -0.785  # Counter-clockwise 45 degrees
+                    # Rotate wrist counter-clockwise 50 degrees (-0.873 radians)
+                    target_roll = -0.873  # Counter-clockwise 50 degrees
                     roll_error = target_roll - joint_state['wrist_roll_pos']
                     
                     # Check if rotation is complete (within 0.05 radians ~3 degrees)
@@ -564,16 +575,38 @@ def main(exposure):
                         print('LOCK: Hold complete! Rotating wrist clockwise 90 degrees...')
                 
                 elif lock_phase == 'rotating_cw':
-                    # Rotate wrist clockwise 90 degrees (from -0.785 to +0.785 radians)
-                    target_roll = 0.785  # Clockwise 90 degrees from -45° position
+                    # Rotate wrist clockwise 100 degrees (from -0.873 to +0.873 radians)
+                    # But check actual hardware limits - use conservative target
+                    wrist_roll_max = get_dxl_joint_limits('wrist_roll')[1]
+                    target_roll = min(0.873, wrist_roll_max - 0.1)  # Stay 0.1 rad from limit
                     roll_error = target_roll - joint_state['wrist_roll_pos']
                     
-                    # Check if rotation is complete (within 0.05 radians ~3 degrees)
-                    if abs(roll_error) < 0.05:
-                        print('LOCK: CW rotation complete! Restoring pose...')
-                        lock_phase = 'restoring'
+                    # Debug: print wrist position every 30 iterations
+                    if lock_state_count % 30 == 0:
+                        print(f'LOCK CW: Current roll = {joint_state["wrist_roll_pos"]:.3f}, Target = {target_roll:.3f}, Error = {roll_error:.3f}, Limit = {wrist_roll_max:.3f}')
+                    
+                    # Check if rotation is complete (within 0.1 radians ~6 degrees)
+                    if abs(roll_error) < 0.1:
+                        print('LOCK: CW rotation complete! Stopping controller and retracting...')
                         cmd = zero_vel.copy()
                         controller.set_command(cmd)
+                        time.sleep(0.3)
+                        
+                        # Stop the velocity controller before switching to position control
+                        controller.stop()
+                        time.sleep(0.2)
+                        
+                        # Explicitly retract arm and lift
+                        print('LOCK: Retracting arm...')
+                        robot.arm.move_to(0.01)
+                        robot.lift.move_to(1.03)
+                        robot.push_command()
+                        robot.wait_command()
+                        
+                        print('LOCK: Restoring full pose...')
+                        recenter_robot(robot)
+                        print('LOCK: Pose restored! Exiting program...')
+                        break  # Exit the main loop
                     else:
                         # Apply velocity to rotate wrist
                         cmd = zero_vel.copy()
@@ -586,15 +619,6 @@ def main(exposure):
                             cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                             cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                             controller.set_command(cmd)
-                
-                elif lock_phase == 'restoring':
-                    # Stop the controller and restore pose using recenter_robot
-                    cmd = zero_vel.copy()
-                    controller.set_command(cmd)
-                    print('LOCK: Restoring robot to initial pose...')
-                    recenter_robot(robot)
-                    print('LOCK: Pose restored! Exiting program...')
-                    break  # Exit the main loop
 
                 # Timeout safety (extended to account for all phases)
                 if lock_state_count > 300:  # ~20 seconds timeout at 15Hz
