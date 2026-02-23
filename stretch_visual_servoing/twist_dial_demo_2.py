@@ -64,7 +64,7 @@ stop_if_target_not_detected_this_many_frames = 10 #4 #1
 stop_if_fingers_not_detected_this_many_frames = 10 #4 #1
 
 # Lock behavior parameters
-lock_error_threshold = 0.20  # 25 cm - if we were this close before losing detection, proceed to lock
+lock_error_threshold = 0.20  # 20 cm - if we were this close before losing detection, proceed to lock
 
 # Defines a deadzone for mobile base rotation, since low values can
 # lead to no motion and noises on some surfaces like carpets.
@@ -97,7 +97,7 @@ arm_retraction_speedup = 5.0
 
 max_gripper_length = 0.26
 
-overall_visual_servoing_velocity_scale = 1.0
+overall_visual_servoing_velocity_scale = 0.2
 
 joint_visual_servoing_velocity_scale = {
     'base_counterclockwise' : 4.0,
@@ -197,7 +197,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_to(1.03)
+    robot.lift.move_to(0.98)
     robot.push_command()
     robot.wait_command()
 
