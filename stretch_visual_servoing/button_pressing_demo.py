@@ -97,7 +97,7 @@ arm_retraction_speedup = 5.0
 
 max_gripper_length = 0.26
 
-overall_visual_servoing_velocity_scale = 1.0
+overall_visual_servoing_velocity_scale = 0.2
 
 joint_visual_servoing_velocity_scale = {
     'base_counterclockwise' : 4.0,
@@ -116,7 +116,7 @@ joint_state_center = {
     'lift_pos' : 0.7,
     'arm_pos': 0.01,
     'wrist_yaw_pos': 0.0,
-    'wrist_pitch_pos': 0.0, #-0.6
+    'wrist_pitch_pos': -0.4, # 0.0, #-0.6
     'wrist_roll_pos': 0.0,
     'gripper_pos': 0
 }
@@ -196,7 +196,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_to(0.97)
+    robot.lift.move_to(1.035)
     robot.push_command()
     robot.wait_command()
 
@@ -394,7 +394,10 @@ def main(exposure):
                     x_error, y_error, z_error = position_error
 
                     yaw_velocity = -x_error
-                    pitch_velocity = -y_error
+                    # pitch_velocity = -y_error
+                    
+                    # Keep wrist pitch fixed at recenter_robot position
+                    pitch_velocity = 0.0
 
                     # Keep wrist roll at 0 degrees
                     roll_velocity = 0.0 - joint_state['wrist_roll_pos']
