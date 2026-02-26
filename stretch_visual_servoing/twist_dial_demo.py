@@ -116,7 +116,7 @@ joint_state_center = {
     'lift_pos' : 0.7,
     'arm_pos': 0.01,
     'wrist_yaw_pos': 0.0,
-    'wrist_pitch_pos': -0.3, #-0.6
+    'wrist_pitch_pos': -0.2, #-0.6
     'wrist_roll_pos': 0.0,
     'gripper_pos': 0
 }
@@ -197,7 +197,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_to(1.00)
+    robot.lift.move_to(0.98)
     robot.push_command()
     robot.wait_command()
 
