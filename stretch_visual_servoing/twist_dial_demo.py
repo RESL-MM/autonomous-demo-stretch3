@@ -116,7 +116,7 @@ joint_state_center = {
     'lift_pos' : 0.7,
     'arm_pos': 0.01,
     'wrist_yaw_pos': 0.0,
-    'wrist_pitch_pos': -0.22, #-0.6
+    'wrist_pitch_pos': -0.3, #-0.6
     'wrist_roll_pos': 0.0,
     'gripper_pos': 0
 }
@@ -197,7 +197,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_to(1.03)
+    robot.lift.move_to(1.00)
     robot.push_command()
     robot.wait_command()
 
@@ -285,23 +285,22 @@ def main(exposure):
                 markers = aruco_detector.get_detected_marker_dict()                         
                 fingertips = aruco_to_fingertips.get_fingertips(markers)                    
                                                                                             
-                tag_23_pos = None                                                      
-                tag_24_pos = None                                                     
+                tag_6_pos = None                                                      
+                tag_5_pos = None                                                     
                 for k in markers:                                                           
                     m = markers[k]                                                          
-                    name = m['info']['name']                                                
-                    if name == 'left_dial':  # Tag 23                                               
-                        tag_23_pos = m['pos']                                          
-                    elif name == 'middle_dialbutton':  # Tag 24                                            
-                        tag_24_pos = m['pos']                                         
+                    if k == 6:
+                        tag_6_pos = m['pos']                                          
+                    elif k == 5:
+                        tag_5_pos = m['pos']                                         
                                                                                             
-                # Calculate midpoint if both markers detected (tag 23 on left, tag 24 on right)                               
-                if tag_23_pos is not None and tag_24_pos is not None:            
-                    toy_target = (tag_23_pos + tag_24_pos) / 2.0   
+                # Calculate midpoint if both markers detected (tag 6 on left, tag 5 on right)                               
+                if tag_6_pos is not None and tag_5_pos is not None:            
+                    toy_target = (tag_6_pos + tag_5_pos) / 2.0   
 
             print()
 
-            target_name = 'Dial Target (Tags 23 & 24)'
+            target_name = 'Dial Target (Tags 6 & 5)'
             if toy_target is None:
                 print(target_name + ' Detection: FAILED')
             else:
@@ -536,7 +535,7 @@ def main(exposure):
                     if initial_arm_pos is None:
                         initial_arm_pos = joint_state['arm_pos']
                     
-                    target_arm_pos = initial_arm_pos + 0.02  # Extend 3cm
+                    target_arm_pos = initial_arm_pos + 0.05  # Extend 3cm
                     arm_error = target_arm_pos - joint_state['arm_pos']
                     
                     # Check if extension is complete (within 0.005m = 5mm)
