@@ -116,7 +116,7 @@ joint_state_center = {
     'lift_pos' : 0.7,
     'arm_pos': 0.01,
     'wrist_yaw_pos': 0.0,
-    'wrist_pitch_pos': -0.4, # 0.0, #-0.6
+    'wrist_pitch_pos': -0.74, # 0.0, #-0.6
     'wrist_roll_pos': 0.0,
     'gripper_pos': 0
 }
@@ -196,7 +196,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_to(1.035)
+    robot.lift.move_to(1.2)
     robot.push_command()
     robot.wait_command()
 
@@ -480,51 +480,80 @@ def main(exposure):
                         controller.set_command(cmd)
 
             elif behavior == 'lock':
-                # Lock behavior: hold for 5 seconds, then retract arm back
+                # Lock behavior: wait 0.5s, extend arm to press, hold, then retract
                 if prev_behavior != 'lock':
                     lock_state_count = 0
-                    lock_holding = True
-                    print('LOCK: Button reached! Holding for 5 seconds...')
+                    lock_phase = 'wait_before_press'
+                    print('LOCK: Button reached! Waiting 0.5s before pressing...')
                 prev_behavior = behavior
 
-                # Hold for 5 seconds (75 iterations at 15Hz)
-                hold_duration = 75  # 5 seconds at 15Hz
-                
-                if lock_holding and lock_state_count < hold_duration:
-                    # Hold position by applying zero velocity
+                wait_duration = 8       # 0.5 seconds at 15Hz
+                press_duration = 12     # ~0.8 seconds of arm extension at 15Hz
+                hold_duration = 75      # 5 seconds at 15Hz
+
+                if lock_phase == 'wait_before_press':
+                    cmd = zero_vel.copy()
+                    controller.set_command(cmd)
+                    if lock_state_count >= wait_duration:
+                        lock_phase = 'press'
+                        lock_state_count = 0
+                        print('LOCK: Extending arm to press button...')
+
+                elif lock_phase == 'press':
+                    cmd = {
+                        'arm_out': 0.08,
+                    }
+                    cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
+                    cmd = {k: joint_visual_servoing_velocity_scale.get(k, 1.0) * v for (k,v) in cmd.items()}
+                    if motion_on:
+                        cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                        cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                        controller.set_command(cmd)
+                    if lock_state_count >= press_duration:
+                        lock_phase = 'hold'
+                        lock_state_count = 0
+                        print('LOCK: Press complete! Holding for 5 seconds...')
+
+                elif lock_phase == 'hold':
                     cmd = zero_vel.copy()
                     controller.set_command(cmd)
                     
-                    if lock_state_count % 15 == 0:  # Print every second
+                    if lock_state_count % 15 == 0:
                         seconds_remaining = (hold_duration - lock_state_count) // 15
                         print(f'LOCK: Holding... {seconds_remaining} seconds remaining')
                     
-                    if lock_state_count >= hold_duration - 1:
-                        lock_holding = False
+                    if lock_state_count >= hold_duration:
+                        lock_phase = 'retract'
+                        lock_state_count = 0
                         print('LOCK: Hold complete! Starting retraction...')
-                
-                elif not lock_holding:
-                    # Now retract the arm back
+
+                elif lock_phase == 'retract':
                     cmd = {
                         'lift_up': 0.3,
                         'arm_out': -1.0
                     }
                     
-                    # Check if arm is fully retracted
                     if joint_state['arm_pos'] < (0.02 + min_joint_state['arm_pos']):
                         print('LOCK: Retraction complete!')
                         cmd = zero_vel.copy()
                         controller.set_command(cmd)
                         print('LOCK: Behavior complete! Exiting program...')
-                        break  # Exit the main loop
+                        break
                     
                     if motion_on:
                         cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                         cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                         controller.set_command(cmd)
 
-                # Timeout safety (extended to account for hold time)
-                if lock_state_count > 165:  # ~11 seconds timeout at 15Hz (5s hold + 6s retract)
+                # Timeout safety
+                total_elapsed = lock_state_count
+                if lock_phase == 'press':
+                    total_elapsed += wait_duration
+                elif lock_phase == 'hold':
+                    total_elapsed += wait_duration + press_duration
+                elif lock_phase == 'retract':
+                    total_elapsed += wait_duration + press_duration + hold_duration
+                if total_elapsed > 200:
                     cmd = zero_vel.copy()
                     controller.set_command(cmd)
                     print('LOCK: Timeout! Exiting program...')
