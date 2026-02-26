@@ -97,7 +97,7 @@ arm_retraction_speedup = 5.0
 
 max_gripper_length = 0.26
 
-overall_visual_servoing_velocity_scale = 0.2
+overall_visual_servoing_velocity_scale = 0.5
 
 joint_visual_servoing_velocity_scale = {
     'base_counterclockwise' : 4.0,
@@ -289,7 +289,7 @@ def main(exposure):
                 for k in markers:                                                           
                     m = markers[k]                                                          
                     name = m['info']['name']                                                
-                    if name == 'button_left':                                               
+                    if name == 'middle_dialbutton':                                               
                         button_left_pos = m['pos']                                          
                     elif name == 'button_right':                                            
                         button_right_pos = m['pos']                                         

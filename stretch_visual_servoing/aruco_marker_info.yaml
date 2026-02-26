@@ -16,13 +16,18 @@
   use_rgb_only: True
   name: 'finger_right'
   link: 'link_finger_right'
-'5':
-  length_mm: 19
+'6':
+  length_mm: 25
   use_rgb_only: True
-  name: 'button_left'
+  name: 'left_dial'
+  link: 'None'
+'5':
+  length_mm: 25
+  use_rgb_only: True
+  name: 'middle_dialbutton'
   link: 'None'
 '4':
-  length_mm: 19
+  length_mm: 25
   use_rgb_only: True
   name: 'button_right'
   link: 'None'
