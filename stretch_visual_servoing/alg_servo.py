@@ -15,6 +15,7 @@ import argparse
 import loop_timer as lt
 from stretch_body import robot_params
 from stretch_body import hello_utils as hu
+import math
 
 def draw_origin(image, camera_info, origin_xyz, color):
     radius = 6
@@ -56,6 +57,9 @@ def get_dxl_joint_limits(joint):
     
 ####################################
 # Miscellaneous Parameters
+COUNTER_CLOCKWISE = -1
+CLOCKWISE = 1
+TOOL_OFFSET = np.array([0.0, 0.02, -0.025])
 
 motion_on = True
 print_timing = True
@@ -103,7 +107,7 @@ arm_retraction_speedup = 5.0
 
 max_gripper_length = 0.26
 
-overall_visual_servoing_velocity_scale = 0.2
+overall_visual_servoing_velocity_scale = 0.3
 
 joint_visual_servoing_velocity_scale = {
     'base_counterclockwise' : 4.0,
@@ -198,7 +202,7 @@ def recenter_robot(robot):
     robot.wait_command()
 
     #robot.lift.move_to(joint_state_center['lift_pos'])
-    robot.lift.move_to(1.05)
+    robot.lift.move_to(0.98)
     robot.push_command()
     robot.wait_command()
 
@@ -206,6 +210,43 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
         
+def twist_dial(robot, joint_state, direction=CLOCKWISE):
+    # assume we are very close to and in front of
+    tool_lift_offset = -TOOL_OFFSET[1] # y offset in camera space is lift offset in world/robot space
+    
+    turn_angle = direction * np.pi/4 # e.g. to clockwise dial turn we first counter clockwise turn then clockwise turn
+    
+    robot.end_of_arm.get_joint('wrist_roll').move_to(joint_state['wrist_roll_pos'] - turn_angle)
+    robot.push_command()
+    robot.wait_command()
+
+    # TODO: this can actually be hard coded...
+    # TODO: could also split h_dist and v_dist into two movement phases
+    h_dist = abs(tool_lift_offset * math.sin(turn_angle))
+    v_dist = abs(tool_lift_offset * math.cos(turn_angle))
+    robot.lift.move_to(joint_state['lift_pos']+v_dist)
+    robot.base.translate_by(direction * h_dist)
+    robot.arm.move_to(joint_state['arm_pos']+0.01)
+    robot.push_command()
+    robot.wait_command()
+
+    # in theory h_dist and v_dist should be the same...
+    robot.end_of_arm.get_joint('wrist_roll').move_to(joint_state['wrist_roll_pos'] + turn_angle)
+    robot.lift.move_to(joint_state['lift_pos']+v_dist)
+    robot.base.translate_by(-direction * h_dist)
+    robot.push_command()
+    robot.wait_command()
+
+    robot.end_of_arm.get_joint('wrist_roll').move_to(joint_state['wrist_roll_pos'] + turn_angle)
+    robot.lift.move_to(joint_state['lift_pos']-v_dist)
+    robot.base.translate_by(-direction * h_dist)
+    robot.push_command()
+    robot.wait_command()
+
+    robot.arm.move_to(joint_state['arm_pos']-0.03)
+    robot.push_command()
+    robot.wait_command()
+    print("yo")
 
 def main(exposure):
     try:
@@ -305,7 +346,7 @@ def main(exposure):
                 dial_unit_z = (dial_left_z + dial_right_z)
                 dial_unit_z = dial_unit_z/np.linalg.norm(dial_unit_z)
                 print(f"dlp: {dial_left_pos}\ndrp: {dial_right_pos}\ndbz: {dial_unit_z}")
-                toy_target = ((dial_left_pos + dial_right_pos) / 2.0) + np.array([0.0,0.0,-0.07])
+                toy_target = ((dial_left_pos + dial_right_pos) / 2.0) + np.array([0.0,0.0,-0.07]) # TODO: adjust dial offset
                 print(toy_target)
 
             print()
@@ -365,9 +406,6 @@ def main(exposure):
             print('grasping_the_target =', grasping_the_target)
 
             if (between_fingertips is not None) and (toy_target is not None):
-                # TODO: adjust tool offsets            
-                # TOOL_OFFSET = np.array([0.0, 0.02, -0.025])
-                TOOL_OFFSET = np.array([0.0, 0.0, 0.0])
                 position_error = toy_target - between_fingertips - TOOL_OFFSET # AC = AB + AC => -AC = -AB - AC
                 print(f"pos err: {position_error}")
                 target_error = np.linalg.norm(position_error)
@@ -411,7 +449,8 @@ def main(exposure):
                     # TODO: implement yaw correction via base movement
                     # yaw_velocity = -x_error
                     yaw_velocity = 0.0
-                    pitch_velocity = -y_error
+                    # pitch_velocity = -y_error
+                    pitch_velocity = 0.0
 
                     roll_velocity =  0.0 # lock wrist roll rotation while going to targety
 
@@ -452,6 +491,7 @@ def main(exposure):
                     if target_error < grasp_if_error_below_this:
                         cmd = zero_vel.copy()
                         controller.set_command(cmd)
+                        twist_dial(robot, joint_state)
                     else:
                         cmd['gripper_open'] = gripper_open_speed
 
@@ -519,8 +559,6 @@ def main(exposure):
         controller.stop()
         robot.stop()
         pipeline.stop()
-
-
 
 
 if __name__ == '__main__':
