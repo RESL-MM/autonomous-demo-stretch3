@@ -116,7 +116,7 @@ joint_state_center = {
     'lift_pos' : 0.7,
     'arm_pos': 0.01,
     'wrist_yaw_pos': 0.0,
-    'wrist_pitch_pos': -0.2, #-0.6
+    'wrist_pitch_pos': -0.4, #-0.6
     'wrist_roll_pos': 0.0,
     'gripper_pos': 0
 }
@@ -197,7 +197,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_to(0.98)
+    robot.lift.move_to(1.02)
     robot.push_command()
     robot.wait_command()
 
@@ -396,8 +396,7 @@ def main(exposure):
                     # Keep wrist yaw stable at 0 degrees instead of servoing
                     yaw_velocity = 0.0 - joint_state['wrist_yaw_pos']
                     
-                    # Keep wrist pitch fixed at -0.2 radians during approach
-                    target_pitch = -0.22
+                    target_pitch = joint_state_center['wrist_pitch_pos']
                     pitch_velocity = target_pitch - joint_state['wrist_pitch_pos']
 
                     # Keep wrist roll stable at 0 degrees during approach
@@ -499,31 +498,30 @@ def main(exposure):
                     initial_arm_pos = None
                     lock_hold_count = 0
 
-                # Debug output
-                print(f'LOCK: Phase = {lock_phase}, Count = {lock_state_count}')
+                print(f'LOCK: Phase = {lock_phase}, Count = {lock_state_count}, wrist_roll = {joint_state["wrist_roll_pos"]:.3f} rad ({np.degrees(joint_state["wrist_roll_pos"]):.1f} deg)')
 
-                # Hold for 5 seconds (75 iterations at 15Hz)
                 hold_duration = 75  # 5 seconds at 15Hz
+                lock_roll_gain = 0.8
+                lock_roll_max_vel = 0.4
+                lock_target_pitch = joint_state_center['wrist_pitch_pos']
+                pitch_hold_vel = lock_target_pitch - joint_state['wrist_pitch_pos']
                 
                 if lock_phase == 'rotating_ccw':
-                    # Rotate wrist counter-clockwise 50 degrees (-0.873 radians)
-                    target_roll = -0.873  # Counter-clockwise 50 degrees
+                    target_roll = -0.785  # -45 degrees
                     roll_error = target_roll - joint_state['wrist_roll_pos']
                     
-                    # Check if rotation is complete (within 0.05 radians ~3 degrees)
                     if abs(roll_error) < 0.05:
                         print('LOCK: CCW rotation complete! Extending arm...')
                         lock_phase = 'extending'
+                        lock_state_count = 0
                         initial_arm_pos = joint_state['arm_pos']
                         cmd = zero_vel.copy()
+                        cmd['wrist_pitch_up'] = pitch_hold_vel
                         controller.set_command(cmd)
                     else:
-                        # Apply velocity to rotate wrist
                         cmd = zero_vel.copy()
-                        cmd['wrist_roll_counterclockwise'] = roll_error
-                        
-                        cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
-                        cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
+                        cmd['wrist_roll_counterclockwise'] = np.clip(roll_error * lock_roll_gain, -lock_roll_max_vel, lock_roll_max_vel)
+                        cmd['wrist_pitch_up'] = pitch_hold_vel
                         
                         if motion_on:
                             cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
@@ -531,27 +529,24 @@ def main(exposure):
                             controller.set_command(cmd)
                 
                 elif lock_phase == 'extending':
-                    # Extend arm by 0.03 meters (3 cm)
                     if initial_arm_pos is None:
                         initial_arm_pos = joint_state['arm_pos']
                     
-                    target_arm_pos = initial_arm_pos + 0.05  # Extend 3cm
+                    target_arm_pos = initial_arm_pos + 0.05
                     arm_error = target_arm_pos - joint_state['arm_pos']
                     
-                    # Check if extension is complete (within 0.005m = 5mm)
                     if abs(arm_error) < 0.005:
                         print('LOCK: Arm extension complete! Holding for 5 seconds...')
                         lock_phase = 'holding'
+                        lock_state_count = 0
                         lock_hold_count = 0
                         cmd = zero_vel.copy()
+                        cmd['wrist_pitch_up'] = pitch_hold_vel
                         controller.set_command(cmd)
                     else:
-                        # Apply velocity to extend arm
                         cmd = zero_vel.copy()
-                        cmd['arm_out'] = arm_error * 2.0  # Gentle extension
-                        
-                        cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
-                        cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
+                        cmd['arm_out'] = np.clip(arm_error * 3.0, -1.0, 1.0)
+                        cmd['wrist_pitch_up'] = pitch_hold_vel
                         
                         if motion_on:
                             cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
@@ -560,42 +555,33 @@ def main(exposure):
                 
                 elif lock_phase == 'holding':
                     if lock_hold_count < hold_duration:
-                        # Hold position by applying zero velocity
                         cmd = zero_vel.copy()
+                        cmd['wrist_pitch_up'] = pitch_hold_vel
                         controller.set_command(cmd)
                         
-                        if lock_hold_count % 15 == 0:  # Print every second
+                        if lock_hold_count % 15 == 0:
                             seconds_remaining = (hold_duration - lock_hold_count) // 15
                             print(f'LOCK: Holding... {seconds_remaining} seconds remaining')
                         
                         lock_hold_count += 1
                     else:
                         lock_phase = 'rotating_cw'
-                        print('LOCK: Hold complete! Rotating wrist clockwise 90 degrees...')
+                        lock_state_count = 0
+                        print('LOCK: Hold complete! Rotating wrist clockwise to +45 degrees...')
                 
                 elif lock_phase == 'rotating_cw':
-                    # Rotate wrist clockwise 100 degrees (from -0.873 to +0.873 radians)
-                    # But check actual hardware limits - use conservative target
-                    wrist_roll_max = get_dxl_joint_limits('wrist_roll')[1]
-                    target_roll = min(0.873, wrist_roll_max - 0.1)  # Stay 0.1 rad from limit
+                    target_roll = 0.950  # +45 degrees
                     roll_error = target_roll - joint_state['wrist_roll_pos']
                     
-                    # Debug: print wrist position every 30 iterations
-                    if lock_state_count % 30 == 0:
-                        print(f'LOCK CW: Current roll = {joint_state["wrist_roll_pos"]:.3f}, Target = {target_roll:.3f}, Error = {roll_error:.3f}, Limit = {wrist_roll_max:.3f}')
-                    
-                    # Check if rotation is complete (within 0.1 radians ~6 degrees)
                     if abs(roll_error) < 0.1:
                         print('LOCK: CW rotation complete! Stopping controller and retracting...')
                         cmd = zero_vel.copy()
                         controller.set_command(cmd)
                         time.sleep(0.3)
                         
-                        # Stop the velocity controller before switching to position control
                         controller.stop()
                         time.sleep(0.2)
                         
-                        # Explicitly retract arm and lift
                         print('LOCK: Retracting arm...')
                         robot.arm.move_to(0.01)
                         robot.lift.move_to(1.03)
@@ -605,14 +591,11 @@ def main(exposure):
                         print('LOCK: Restoring full pose...')
                         recenter_robot(robot)
                         print('LOCK: Pose restored! Exiting program...')
-                        break  # Exit the main loop
+                        break
                     else:
-                        # Apply velocity to rotate wrist
                         cmd = zero_vel.copy()
-                        cmd['wrist_roll_counterclockwise'] = roll_error
-                        
-                        cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
-                        cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
+                        cmd['wrist_roll_counterclockwise'] = np.clip(roll_error * lock_roll_gain, -lock_roll_max_vel, lock_roll_max_vel)
+                        cmd['wrist_pitch_up'] = pitch_hold_vel
                         
                         if motion_on:
                             cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
