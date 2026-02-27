@@ -79,7 +79,7 @@ min_base_speed = 0.05
 toy_depth_m = 0.055
 toy_width_m = 0.0542
 
-grasp_if_error_below_this = 0.03
+grasp_if_error_below_this = 0.0175
 
 # Find a way to make the gripper faster? These are the maximum
 # available velocities.
@@ -107,7 +107,7 @@ arm_retraction_speedup = 5.0
 
 max_gripper_length = 0.26
 
-overall_visual_servoing_velocity_scale = 0.3
+overall_visual_servoing_velocity_scale = 0.5
 
 joint_visual_servoing_velocity_scale = {
     'base_counterclockwise' : 4.0,
@@ -126,7 +126,7 @@ joint_state_center = {
     'lift_pos' : 0.7,
     'arm_pos': 0.01,
     'wrist_yaw_pos': 0.0,
-    'wrist_pitch_pos': 0.0, #-0.6
+    'wrist_pitch_pos': -0.2, #-0.6
     'wrist_roll_pos': 0.0,
     'gripper_pos': 10.46
 }
@@ -194,6 +194,7 @@ def recenter_robot(robot):
 
     robot.end_of_arm.get_joint('wrist_yaw').move_to(joint_state_center['wrist_yaw_pos'])
     robot.end_of_arm.get_joint('wrist_pitch').move_to(joint_state_center['wrist_pitch_pos'])
+    robot.end_of_arm.get_joint('wrist_roll').move_to(joint_state_center['wrist_roll_pos'])
     robot.push_command()
     robot.wait_command()
 
@@ -206,17 +207,21 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
 
-    robot.end_of_arm.get_joint('stretch_gripper').move_to(joint_state_center['gripper_pos'])
-    robot.push_command()
-    robot.wait_command()
+    #robot.end_of_arm.get_joint('stretch_gripper').move_to(joint_state_center['gripper_pos'])
+    #robot.push_command()
+    #robot.wait_command()
         
 def twist_dial(robot, joint_state, direction=CLOCKWISE):
     # assume we are very close to and in front of
     tool_lift_offset = -TOOL_OFFSET[1] # y offset in camera space is lift offset in world/robot space
     
     turn_angle = direction * np.pi/4 # e.g. to clockwise dial turn we first counter clockwise turn then clockwise turn
-    
-    robot.end_of_arm.get_joint('wrist_roll').move_to(joint_state['wrist_roll_pos'] - turn_angle)
+   
+    robot.end_of_arm.get_joint('wrist_roll').move_to(0.0)
+    robot.push_command()
+    robot.wait_command()
+
+    robot.end_of_arm.get_joint('wrist_roll').move_to(-turn_angle)
     robot.push_command()
     robot.wait_command()
 
@@ -226,18 +231,20 @@ def twist_dial(robot, joint_state, direction=CLOCKWISE):
     v_dist = abs(tool_lift_offset * math.cos(turn_angle))
     robot.lift.move_to(joint_state['lift_pos']+v_dist)
     robot.base.translate_by(direction * h_dist)
+    robot.push_command()
+    robot.wait_command()
     robot.arm.move_to(joint_state['arm_pos']+0.01)
     robot.push_command()
     robot.wait_command()
 
     # in theory h_dist and v_dist should be the same...
-    robot.end_of_arm.get_joint('wrist_roll').move_to(joint_state['wrist_roll_pos'] + turn_angle)
+    robot.end_of_arm.get_joint('wrist_roll').move_to(0.0)
     robot.lift.move_to(joint_state['lift_pos']+v_dist)
     robot.base.translate_by(-direction * h_dist)
     robot.push_command()
     robot.wait_command()
 
-    robot.end_of_arm.get_joint('wrist_roll').move_to(joint_state['wrist_roll_pos'] + turn_angle)
+    robot.end_of_arm.get_joint('wrist_roll').move_to(turn_angle)
     robot.lift.move_to(joint_state['lift_pos']-v_dist)
     robot.base.translate_by(-direction * h_dist)
     robot.push_command()
@@ -448,11 +455,11 @@ def main(exposure):
 
                     # TODO: implement yaw correction via base movement
                     # yaw_velocity = -x_error
-                    yaw_velocity = 0.0
+                    yaw_velocity = 0.0 - joint_state['wrist_yaw_pos']
                     # pitch_velocity = -y_error
-                    pitch_velocity = 0.0
+                    pitch_velocity = -0.22 - joint_state['wrist_pitch_pos']
 
-                    roll_velocity =  0.0 # lock wrist roll rotation while going to targety
+                    roll_velocity =  0.0 - joint_state['wrist_roll_pos'] # lock wrist roll rotation while going to targety
 
                     # Transform camera frame errors into errors for the Cartesian joints
                     yaw = joint_state['wrist_yaw_pos']
