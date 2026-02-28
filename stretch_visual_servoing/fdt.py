@@ -67,8 +67,8 @@ def main():
     if result.returncode != 0:
         print(f'Button pressing demo exited with code {result.returncode}')
     
-    print('=== Moving base forward 12 cm ===')
-    move_base_forward(0.12)
+    print('=== Moving base forward 10 cm ===')
+    move_base_forward(0.10)
 
     print('=== Starting Dial Twisting Demo (Close) ===')
     result = subprocess.run(
@@ -78,8 +78,8 @@ def main():
     if result.returncode != 0:
         print(f'Dial twisting demo exited with code {result.returncode}')
 
-    print('=== Moving base back 12 cm ===')
-    move_base_back(0.12)
+    print('=== Moving base back 10 cm ===')
+    move_base_back(0.10)
 
     print('=== Pausing for 1 second ===')
     time.sleep(1.0)
