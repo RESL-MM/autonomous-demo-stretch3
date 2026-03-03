@@ -489,7 +489,7 @@ def main(exposure):
 
                 wait_duration = 8       # 0.5 seconds at 15Hz
                 press_duration = 12     # ~0.8 seconds of arm extension at 15Hz
-                hold_duration = 75      # 5 seconds at 15Hz
+                hold_duration = 150     # 10 seconds at 15Hz
 
                 if lock_phase == 'wait_before_press':
                     cmd = zero_vel.copy()
