@@ -47,7 +47,7 @@ def main():
 
     print('=== Starting Dial Twisting Demo ===')
     result = subprocess.run(
-        [sys.executable, 'twist_dial_demo.py', '-e', exposure],
+        [sys.executable, 'twist_dial_demo.py', '-e', exposure, '--mop', 'open'],
         cwd=sys.path[0] or '.',
     )
     if result.returncode != 0:
@@ -66,9 +66,34 @@ def main():
     )
     if result.returncode != 0:
         print(f'Button pressing demo exited with code {result.returncode}')
+
+    print('=== Moving base forward 10 cm ===')
+    move_base_forward(0.10)
+
+    print('=== Starting Dial Twisting Demo (Close) ===')
+    result = subprocess.run(
+        [sys.executable, 'twist_dial_demo.py', '-e', exposure, '--mop', 'close'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'Dial twisting demo exited with code {result.returncode}')
+
+    print('=== Moving base back 10 cm ===')
+    move_base_back(0.10)
+
+    print('=== Pausing for 1 second ===')
+    time.sleep(1.0)
+
+    print('=== Starting Button Pressing Demo ===')
+    result = subprocess.run(
+        [sys.executable, 'button_pressing_demo.py', '-e', exposure],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'Button pressing demo exited with code {result.returncode}')
     
-    print('=== Moving base forward 12 cm ===')
-    move_base_forward(0.12)
+    print('=== Moving base forward 10 cm ===')
+    move_base_forward(0.10)
 
     print('=== Full Demo Complete ===')
 

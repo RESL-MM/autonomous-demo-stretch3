@@ -206,7 +206,7 @@ def recenter_robot(robot):
     # robot.wait_command()
         
 
-def main(exposure):
+def main(exposure, mop):
     try:
         
         robot = rb.Robot()
@@ -507,7 +507,7 @@ def main(exposure):
                 pitch_hold_vel = lock_target_pitch - joint_state['wrist_pitch_pos']
                 
                 if lock_phase == 'rotating_ccw':
-                    target_roll = -0.785  # -45 degrees
+                    target_roll = -0.785 * mop  # -45 degrees
                     roll_error = target_roll - joint_state['wrist_roll_pos']
                     
                     if abs(roll_error) < 0.05:
@@ -570,7 +570,7 @@ def main(exposure):
                         print('LOCK: Hold complete! Rotating wrist clockwise to +45 degrees...')
                 
                 elif lock_phase == 'rotating_cw':
-                    target_roll = 0.950  # +45 degrees
+                    target_roll = 0.950 * mop  # +45 degrees
                     roll_error = target_roll - joint_state['wrist_roll_pos']
                     
                     if abs(roll_error) < 0.1:
@@ -660,12 +660,15 @@ if __name__ == '__main__':
         description='This application demonstrates dial twisting using visual servoing with ArUco markers (tags 23 & 24) and the gripper-mounted D405.',
     )
     parser.add_argument('-e', '--exposure', action='store', type=str, default='low', help=f'Set the D405 exposure to {dh.exposure_keywords} or an integer in the range {dh.exposure_range}') 
-            
+    parser.add_argument('--mop', type=str, choices=['open', 'close'], default='open', help='open or close the machine' )
     
     args = parser.parse_args()
     exposure = args.exposure
+    mop = 1
+    if args.mop == 'close':
+        mop = -1
 
     if not dh.exposure_argument_is_valid(exposure):
         raise argparse.ArgumentTypeError(f'The provided exposure setting, {exposure}, is not a valide keyword, {dh.exposure_keywords}, or is outside of the allowed numeric range, {dh.exposure_range}.')    
     
-    main(exposure)
+    main(exposure, mop)
