@@ -500,7 +500,7 @@ def main(exposure, mop):
 
                 print(f'LOCK: Phase = {lock_phase}, Count = {lock_state_count}, wrist_roll = {joint_state["wrist_roll_pos"]:.3f} rad ({np.degrees(joint_state["wrist_roll_pos"]):.1f} deg)')
 
-                hold_duration = 75  # 5 seconds at 15Hz
+                hold_duration = 30  # 2 seconds at 15Hz
                 lock_roll_gain = 0.8
                 lock_roll_max_vel = 0.4
                 lock_target_pitch = joint_state_center['wrist_pitch_pos']
