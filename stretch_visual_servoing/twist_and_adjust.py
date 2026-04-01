@@ -415,6 +415,15 @@ def main(exposure, mop):
                     lift_velocity = np.dot(rotated_lift, position_error)
                     arm_velocity = np.dot(rotated_arm, position_error)
 
+                    base_movement = 0.0
+
+                    # TODO: adjust x_error threshold value
+                    if (abs(x_error) > 0.005):
+                        base_movement = 0.1
+
+                        if (x_error < 0.0):
+                            base_movement *= -1
+
                     #base_rotational_velocity = np.dot(rotated_base, position_error) / (joint_state['arm_pos'] + max_gripper_length)
                     base_rotational_velocity = np.dot(rotated_base, position_error)
                     #print('base_rotational_velocity =', base_rotational_velocity)
@@ -428,7 +437,7 @@ def main(exposure, mop):
                         arm_velocity = arm_retraction_speedup * arm_velocity
 
                     cmd = {
-                        'base_forward': 0.0, # TODO figure out a threshold x_error to cause base movement in the correct dir
+                        'base_forward': base_movement,
                         'lift_up' : 0.0,  # Disabled to keep tags in view
                         'arm_out' : arm_velocity,
                         'wrist_yaw_counterclockwise' : yaw_velocity,
