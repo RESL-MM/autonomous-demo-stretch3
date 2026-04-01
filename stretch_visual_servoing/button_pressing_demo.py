@@ -116,7 +116,7 @@ joint_state_center = {
     'lift_pos' : 0.7,
     'arm_pos': 0.01,
     'wrist_yaw_pos': 0.0,
-    'wrist_pitch_pos': -0.74, # 0.0, #-0.6
+    'wrist_pitch_pos': -0.72, # 0.0, #-0.6
     'wrist_roll_pos': 0.0,
     'gripper_pos': 0
 }
