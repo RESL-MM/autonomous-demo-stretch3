@@ -4,7 +4,7 @@ import math
 def move(robot, distance: float):
     robot.base.translate_by(distance)
     robot.push_command()
-    robot.wait_command()
+    robot.wait_command(timeout=60.0)
 
 def rotate(robot, angle: float):
     robot.base.rotate_by(angle)
@@ -15,10 +15,10 @@ def main():
     robot = rb.Robot()
     robot.startup()
 
-    move_amt = 12
+    move_amt = 2.5
     rotate_amt = math.pi/2
 
-    move(robot, -12.0)
+    move(robot, -move_amt)
     rotate(robot, -rotate_amt)
     move(robot, 1)
     move(robot, -1)
