@@ -416,13 +416,10 @@ def main(exposure, mop):
                     arm_velocity = np.dot(rotated_arm, position_error)
 
                     base_movement = 0.0
-
+                    vel_scale = 5
                     # TODO: adjust x_error threshold value
-                    if (abs(x_error) > 0.005):
-                        base_movement = 0.1
-
-                        if (x_error < 0.0):
-                            base_movement *= -1
+                    if (abs(x_error) > 0.003):
+                        base_movement = vel_scale * x_error
 
                     #base_rotational_velocity = np.dot(rotated_base, position_error) / (joint_state['arm_pos'] + max_gripper_length)
                     base_rotational_velocity = np.dot(rotated_base, position_error)
@@ -437,7 +434,6 @@ def main(exposure, mop):
                         arm_velocity = arm_retraction_speedup * arm_velocity
 
                     cmd = {
-                        'base_forward': base_movement,
                         'lift_up' : 0.0,  # Disabled to keep tags in view
                         'arm_out' : arm_velocity,
                         'wrist_yaw_counterclockwise' : yaw_velocity,
@@ -461,6 +457,7 @@ def main(exposure, mop):
                         if motion_on:
                             cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                             cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                            cmd['base_forward'] = base_movement
                             controller.set_command(cmd)
 
                 else:
