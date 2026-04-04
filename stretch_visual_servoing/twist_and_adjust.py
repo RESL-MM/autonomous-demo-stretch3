@@ -420,6 +420,7 @@ def main(exposure, mop):
                     # TODO: adjust x_error threshold value
                     if (abs(x_error) > 0.003):
                         base_movement = vel_scale * x_error
+                        np.clip(base_movement, -0.1, 0.1)
 
                     #base_rotational_velocity = np.dot(rotated_base, position_error) / (joint_state['arm_pos'] + max_gripper_length)
                     base_rotational_velocity = np.dot(rotated_base, position_error)
