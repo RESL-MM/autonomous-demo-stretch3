@@ -1,6 +1,7 @@
 import stretch_body.robot as rb
 import math
 import argparse
+import time
 
 def move(robot, distance: float):
     robot.base.translate_by(distance, v_m=0.25)
@@ -20,8 +21,8 @@ def main(dw):
     PUPD_DIST = 0.03
 
     # deposit/withdraw values
-    DW_HEIGHT = 1.0
-    DW_LENGTH = 0.5
+    DW_HEIGHT = 1.05
+    DW_LENGTH = 0.3
 
     if not dw:
         # pick up/put down values
@@ -42,24 +43,47 @@ def main(dw):
     4.5) open gripper (if not open)
     5) fully or partially stow gripper
     """
+    robot.stow()
+
+    print(f"{DW_HEIGHT}, {DW_LENGTH}, {PUPD_DIST}")
+    robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
+    robot.end_of_arm.move_to('wrist_pitch', 0.0)
     robot.lift.move_to(DW_HEIGHT)
-    
+    robot.push_command()
+    robot.wait_command()
+
+    robot.end_of_arm.move_to('wrist_yaw', 0.0)
+
     robot.arm.move_to(DW_LENGTH)
+    robot.push_command()
+    robot.wait_command()
 
     # robot.end_of_arm.move_to(-50) # [-100, 100] => [fully closed, fully open]
+    # robot.push_command()
+    # robot.wait_command()
     
     robot.lift.move_by(-PUPD_DIST)
+    robot.push_command()
+    robot.wait_command()
 
     robot.lift.move_by(PUPD_DIST)
+    robot.push_command()
+    robot.wait_command()
+
     robot.arm.move_to(0.0)
+    robot.push_command()
+    robot.wait_command()
+
+    robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='Stretch3 Wafer Manipulation Tests')
     parser.add_argument('-dw', '--DW', type=str, default='dw', help='set to dw or leave empty for deposit/withdraw behaviour, else change to anything for pick-up/put-down behaviour')
-
     args = parser.parse_args()
     dw = True
     if args.DW != 'dw':
         dw = False
+
+    print(dw)
 
     main(dw)
