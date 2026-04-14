@@ -64,7 +64,7 @@ stop_if_target_not_detected_this_many_frames = 10 #4 #1
 stop_if_fingers_not_detected_this_many_frames = 10 #4 #1
 
 # Lock behavior parameters
-lock_error_threshold = 0.15  # 25 cm - if we were this close before losing detection, proceed to lock
+lock_error_threshold = 0.25  # 25 cm - if we were this close before losing detection, proceed to lock
 
 # Defines a deadzone for mobile base rotation, since low values can
 # lead to no motion and noises on some surfaces like carpets.
@@ -78,7 +78,7 @@ min_base_speed = 0.05
 target_width_m = 0.0542
 
 # Distance threshold to trigger button press (lock behavior)
-grasp_if_error_below_this = 0.1
+grasp_if_error_below_this = 0.07
 
 # Gripper speed when opening at start
 gripper_open_speed = 1.0
@@ -105,7 +105,7 @@ joint_visual_servoing_velocity_scale = {
     'arm_out' : 6.0,
     'wrist_yaw_counterclockwise' : 4.0,
     'wrist_pitch_up' : 6.0,
-    'wrist_roll_counterclockwise': 0.25,  # Slowed down for dial twisting
+    'wrist_roll_counterclockwise': 1.0,
     'gripper_open' : 1.0
 }
 
@@ -116,7 +116,7 @@ joint_state_center = {
     'lift_pos' : 0.7,
     'arm_pos': 0.01,
     'wrist_yaw_pos': 0.0,
-    'wrist_pitch_pos': -0.4, #-0.6
+    'wrist_pitch_pos': -0.72, # 0.0, #-0.6
     'wrist_roll_pos': 0.0,
     'gripper_pos': 0
 }
@@ -130,7 +130,7 @@ min_joint_state = {
     'arm_pos': 0.01, #0.03
     'wrist_yaw_pos': -0.20, #-0.25
     'wrist_pitch_pos': -1.2,
-    'wrist_roll_pos': -1.6,  # Allow larger range for dial twisting
+    'wrist_roll_pos': -0.1,
     'gripper_pos' : 3.0 #3.5 #4.0 #3.0 
     }
 
@@ -140,7 +140,7 @@ max_joint_state = {
     'arm_pos': 0.45,
     'wrist_yaw_pos': 1.0, #0.5
     'wrist_pitch_pos': 0.2, #-0.4
-    'wrist_roll_pos': 1.6,  # Allow larger range for dial twisting
+    'wrist_roll_pos': 0.1,
     'gripper_pos': get_dxl_joint_limits('stretch_gripper')[1] #10.46
     }
 
@@ -183,13 +183,12 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
 
-
-    robot.arm.move_to(joint_state_center['arm_pos'])
-    robot.push_command()
-    robot.wait_command()
-    
     robot.end_of_arm.get_joint('wrist_yaw').move_to(joint_state_center['wrist_yaw_pos'])
     robot.end_of_arm.get_joint('wrist_pitch').move_to(joint_state_center['wrist_pitch_pos'])
+    robot.push_command()
+    robot.wait_command()
+
+    robot.arm.move_to(joint_state_center['arm_pos'])
     robot.push_command()
     robot.wait_command()
     
@@ -197,7 +196,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_to(1.02)
+    robot.lift.move_to(1.2)
     robot.push_command()
     robot.wait_command()
 
@@ -206,7 +205,7 @@ def recenter_robot(robot):
     # robot.wait_command()
         
 
-def main(exposure, mop):
+def main(exposure):
     try:
         
         robot = rb.Robot()
@@ -285,22 +284,23 @@ def main(exposure, mop):
                 markers = aruco_detector.get_detected_marker_dict()                         
                 fingertips = aruco_to_fingertips.get_fingertips(markers)                    
                                                                                             
-                tag_6_pos = None                                                      
-                tag_5_pos = None                                                     
+                button_left_pos = None                                                      
+                button_right_pos = None                                                     
                 for k in markers:                                                           
                     m = markers[k]                                                          
-                    if k == 6:
-                        tag_6_pos = m['pos']                                          
-                    elif k == 5:
-                        tag_5_pos = m['pos']                                         
+                    name = m['info']['name']                                                
+                    if name == 'middle_dialbutton':                                               
+                        button_left_pos = m['pos']                                          
+                    elif name == 'button_right':                                            
+                        button_right_pos = m['pos']                                         
                                                                                             
-                # Calculate midpoint if both markers detected (tag 6 on left, tag 5 on right)                               
-                if tag_6_pos is not None and tag_5_pos is not None:            
-                    toy_target = (tag_6_pos + tag_5_pos) / 2.0   
+                # Calculate midpoint if both markers detected                               
+                if button_left_pos is not None and button_right_pos is not None:            
+                    toy_target = (button_left_pos + button_right_pos) / 2.0   
 
             print()
 
-            target_name = 'Dial Target (Tags 6 & 5)'
+            target_name = 'Button (ArUco)'
             if toy_target is None:
                 print(target_name + ' Detection: FAILED')
             else:
@@ -393,15 +393,14 @@ def main(exposure, mop):
 
                     x_error, y_error, z_error = position_error
 
-                    # Keep wrist yaw stable at 0 degrees instead of servoing
-                    yaw_velocity = 0.0 - joint_state['wrist_yaw_pos']
+                    yaw_velocity = -x_error
+                    # pitch_velocity = -y_error
                     
-                    target_pitch = joint_state_center['wrist_pitch_pos']
-                    pitch_velocity = target_pitch - joint_state['wrist_pitch_pos']
+                    # Keep wrist pitch fixed at recenter_robot position
+                    pitch_velocity = 0.0
 
-                    # Keep wrist roll stable at 0 degrees during approach
-                    target_roll = 0.0
-                    roll_velocity = target_roll - joint_state['wrist_roll_pos']
+                    # Keep wrist roll at 0 degrees
+                    roll_velocity = 0.0 - joint_state['wrist_roll_pos']
 
                     # Transform camera frame errors into errors for the Cartesian joints
                     yaw = joint_state['wrist_yaw_pos']
@@ -415,18 +414,18 @@ def main(exposure, mop):
                     lift_velocity = np.dot(rotated_lift, position_error)
                     arm_velocity = np.dot(rotated_arm, position_error)
 
-                    base_movement = 0.0
-                    vel_scale = 10
-                    # TODO: adjust x_error threshold value
-                    if (abs(x_error) > 0.005):
-                        base_movement = vel_scale * -x_error
-                        np.clip(base_movement, -0.1, 0.1)
-
                     #base_rotational_velocity = np.dot(rotated_base, position_error) / (joint_state['arm_pos'] + max_gripper_length)
                     base_rotational_velocity = np.dot(rotated_base, position_error)
                     #print('base_rotational_velocity =', base_rotational_velocity)
                     if abs(base_rotational_velocity) < min_base_speed:
                         base_rotational_velocity = 0.0
+
+                    base_movement = 0.0
+                    vel_scale = 5
+
+                    if (abs(x_error) > 0.003):
+                        base_movement = vel_scale * (-x_error)
+                        np.clip(base_movement, -0.1, 0.1)
 
                     #print('base_rotational_velocity =', base_rotational_velocity)
                     #print('base_odom_theta =', joint_state['base_odom_theta'])
@@ -489,129 +488,80 @@ def main(exposure, mop):
                         controller.set_command(cmd)
 
             elif behavior == 'lock':
-                # Lock behavior: rotate CCW 50°, extend arm, hold 5s, rotate CW 100°, restore
+                # Lock behavior: wait 0.5s, extend arm to press, hold, then retract
                 if prev_behavior != 'lock':
                     lock_state_count = 0
-                    lock_phase = 'rotating_ccw'
-                    initial_arm_pos = None
-                    lock_hold_count = 0
-                    print('LOCK: Target reached! Rotating counter-clockwise 50 degrees...')
+                    lock_phase = 'wait_before_press'
+                    print('LOCK: Button reached! Waiting 0.5s before pressing...')
                 prev_behavior = behavior
 
-                # Safety check - ensure lock_phase is defined
-                if 'lock_phase' not in locals():
-                    print('WARNING: lock_phase not defined, initializing...')
-                    lock_phase = 'rotating_ccw'
-                    lock_state_count = 0
-                    initial_arm_pos = None
-                    lock_hold_count = 0
+                wait_duration = 8       # 0.5 seconds at 15Hz
+                press_duration = 12     # ~0.8 seconds of arm extension at 15Hz
+                hold_duration = 150     # 10 seconds at 15Hz
 
-                print(f'LOCK: Phase = {lock_phase}, Count = {lock_state_count}, wrist_roll = {joint_state["wrist_roll_pos"]:.3f} rad ({np.degrees(joint_state["wrist_roll_pos"]):.1f} deg)')
+                if lock_phase == 'wait_before_press':
+                    cmd = zero_vel.copy()
+                    controller.set_command(cmd)
+                    if lock_state_count >= wait_duration:
+                        lock_phase = 'press'
+                        lock_state_count = 0
+                        print('LOCK: Extending arm to press button...')
 
-                hold_duration = 30  # 2 seconds at 15Hz
-                lock_roll_gain = 0.8
-                lock_roll_max_vel = 0.4
-                lock_target_pitch = joint_state_center['wrist_pitch_pos']
-                pitch_hold_vel = lock_target_pitch - joint_state['wrist_pitch_pos']
-                
-                if lock_phase == 'rotating_ccw':
-                    target_roll = -0.785 * mop  # -45 degrees
-                    roll_error = target_roll - joint_state['wrist_roll_pos']
-                    
-                    if abs(roll_error) < 0.05:
-                        print('LOCK: CCW rotation complete! Extending arm...')
-                        lock_phase = 'extending'
+                elif lock_phase == 'press':
+                    cmd = {
+                        'arm_out': 0.08,
+                    }
+                    cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
+                    cmd = {k: joint_visual_servoing_velocity_scale.get(k, 1.0) * v for (k,v) in cmd.items()}
+                    if motion_on:
+                        cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                        cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                        controller.set_command(cmd)
+                    if lock_state_count >= press_duration:
+                        lock_phase = 'hold'
                         lock_state_count = 0
-                        initial_arm_pos = joint_state['arm_pos']
-                        cmd = zero_vel.copy()
-                        cmd['wrist_pitch_up'] = pitch_hold_vel
-                        controller.set_command(cmd)
-                    else:
-                        cmd = zero_vel.copy()
-                        cmd['wrist_roll_counterclockwise'] = np.clip(roll_error * lock_roll_gain, -lock_roll_max_vel, lock_roll_max_vel)
-                        cmd['wrist_pitch_up'] = pitch_hold_vel
-                        
-                        if motion_on:
-                            cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                            cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                            controller.set_command(cmd)
-                
-                elif lock_phase == 'extending':
-                    if initial_arm_pos is None:
-                        initial_arm_pos = joint_state['arm_pos']
+                        print('LOCK: Press complete! Holding for 5 seconds...')
+
+                elif lock_phase == 'hold':
+                    cmd = zero_vel.copy()
+                    controller.set_command(cmd)
                     
-                    target_arm_pos = initial_arm_pos + 0.05
-                    arm_error = target_arm_pos - joint_state['arm_pos']
+                    if lock_state_count % 15 == 0:
+                        seconds_remaining = (hold_duration - lock_state_count) // 15
+                        print(f'LOCK: Holding... {seconds_remaining} seconds remaining')
                     
-                    if abs(arm_error) < 0.005:
-                        print('LOCK: Arm extension complete! Holding for 5 seconds...')
-                        lock_phase = 'holding'
+                    if lock_state_count >= hold_duration:
+                        lock_phase = 'retract'
                         lock_state_count = 0
-                        lock_hold_count = 0
-                        cmd = zero_vel.copy()
-                        cmd['wrist_pitch_up'] = pitch_hold_vel
-                        controller.set_command(cmd)
-                    else:
-                        cmd = zero_vel.copy()
-                        cmd['arm_out'] = np.clip(arm_error * 3.0, -1.0, 1.0)
-                        cmd['wrist_pitch_up'] = pitch_hold_vel
-                        
-                        if motion_on:
-                            cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                            cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                            controller.set_command(cmd)
-                
-                elif lock_phase == 'holding':
-                    if lock_hold_count < hold_duration:
-                        cmd = zero_vel.copy()
-                        cmd['wrist_pitch_up'] = pitch_hold_vel
-                        controller.set_command(cmd)
-                        
-                        if lock_hold_count % 15 == 0:
-                            seconds_remaining = (hold_duration - lock_hold_count) // 15
-                            print(f'LOCK: Holding... {seconds_remaining} seconds remaining')
-                        
-                        lock_hold_count += 1
-                    else:
-                        lock_phase = 'rotating_cw'
-                        lock_state_count = 0
-                        print('LOCK: Hold complete! Rotating wrist clockwise to +45 degrees...')
-                
-                elif lock_phase == 'rotating_cw':
-                    target_roll = 0.950 * mop  # +45 degrees
-                    roll_error = target_roll - joint_state['wrist_roll_pos']
+                        print('LOCK: Hold complete! Starting retraction...')
+
+                elif lock_phase == 'retract':
+                    cmd = {
+                        'lift_up': 0.3,
+                        'arm_out': -1.0
+                    }
                     
-                    if abs(roll_error) < 0.1:
-                        print('LOCK: CW rotation complete! Stopping controller and retracting...')
+                    if joint_state['arm_pos'] < (0.02 + min_joint_state['arm_pos']):
+                        print('LOCK: Retraction complete!')
                         cmd = zero_vel.copy()
                         controller.set_command(cmd)
-                        time.sleep(0.3)
-                        
-                        controller.stop()
-                        time.sleep(0.2)
-                        
-                        print('LOCK: Retracting arm...')
-                        robot.arm.move_to(0.01)
-                        robot.lift.move_to(1.03)
-                        robot.push_command()
-                        robot.wait_command()
-                        
-                        print('LOCK: Restoring full pose...')
-                        recenter_robot(robot)
-                        print('LOCK: Pose restored! Exiting program...')
+                        print('LOCK: Behavior complete! Exiting program...')
                         break
-                    else:
-                        cmd = zero_vel.copy()
-                        cmd['wrist_roll_counterclockwise'] = np.clip(roll_error * lock_roll_gain, -lock_roll_max_vel, lock_roll_max_vel)
-                        cmd['wrist_pitch_up'] = pitch_hold_vel
-                        
-                        if motion_on:
-                            cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                            cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                            controller.set_command(cmd)
+                    
+                    if motion_on:
+                        cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                        cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                        controller.set_command(cmd)
 
-                # Timeout safety (extended to account for all phases)
-                if lock_state_count > 300:  # ~20 seconds timeout at 15Hz
+                # Timeout safety
+                total_elapsed = lock_state_count
+                if lock_phase == 'press':
+                    total_elapsed += wait_duration
+                elif lock_phase == 'hold':
+                    total_elapsed += wait_duration + press_duration
+                elif lock_phase == 'retract':
+                    total_elapsed += wait_duration + press_duration + hold_duration
+                if total_elapsed > 200:
                     cmd = zero_vel.copy()
                     controller.set_command(cmd)
                     print('LOCK: Timeout! Exiting program...')
@@ -664,19 +614,16 @@ if __name__ == '__main__':
 
     
     parser = argparse.ArgumentParser(
-        prog='Stretch 3 Dial Twisting Demo',
-        description='This application demonstrates dial twisting using visual servoing with ArUco markers (tags 23 & 24) and the gripper-mounted D405.',
+        prog='Stretch 3 Button Pressing Demo',
+        description='This application demonstrates button pressing using visual servoing with ArUco markers and the gripper-mounted D405.',
     )
     parser.add_argument('-e', '--exposure', action='store', type=str, default='low', help=f'Set the D405 exposure to {dh.exposure_keywords} or an integer in the range {dh.exposure_range}') 
-    parser.add_argument('--mop', type=str, choices=['open', 'close'], default='open', help='open or close the machine' )
+            
     
     args = parser.parse_args()
     exposure = args.exposure
-    mop = 1
-    if args.mop == 'close':
-        mop = -1
 
     if not dh.exposure_argument_is_valid(exposure):
         raise argparse.ArgumentTypeError(f'The provided exposure setting, {exposure}, is not a valide keyword, {dh.exposure_keywords}, or is outside of the allowed numeric range, {dh.exposure_range}.')    
     
-    main(exposure, mop)
+    main(exposure)
