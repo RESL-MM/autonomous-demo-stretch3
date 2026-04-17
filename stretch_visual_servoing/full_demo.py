@@ -47,7 +47,7 @@ def main():
 
     print('=== Starting Dial Twisting Demo ===')
     result = subprocess.run(
-        [sys.executable, 'twist_and_adjust.py', '-e', exposure, '--mop', 'close'],
+        [sys.executable, 'twist_dial_demo.py', '-e', exposure, '--mop', 'close'],
         cwd=sys.path[0] or '.',
     )
     if result.returncode != 0:
@@ -61,7 +61,7 @@ def main():
 
     print('=== Starting Button Pressing Demo ===')
     result = subprocess.run(
-        [sys.executable, 'button_and_adjust.py', '-e', exposure],
+        [sys.executable, 'button_pressing_demo.py', '-e', exposure],
         cwd=sys.path[0] or '.',
     )
     if result.returncode != 0:

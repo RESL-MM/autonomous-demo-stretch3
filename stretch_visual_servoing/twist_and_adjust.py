@@ -64,7 +64,7 @@ stop_if_target_not_detected_this_many_frames = 10 #4 #1
 stop_if_fingers_not_detected_this_many_frames = 10 #4 #1
 
 # Lock behavior parameters
-lock_error_threshold = 0.15  # 25 cm - if we were this close before losing detection, proceed to lock
+lock_error_threshold = 0.1  # 25 cm - if we were this close before losing detection, proceed to lock
 
 # Defines a deadzone for mobile base rotation, since low values can
 # lead to no motion and noises on some surfaces like carpets.
@@ -247,6 +247,7 @@ def main(exposure, mop):
             loop_timer.start_of_iteration()
 
             toy_target = None
+            toy_target_frame = None
             fingertip_left_pos = None       
             fingertip_right_pos = None
             between_fingertips = None
@@ -285,18 +286,24 @@ def main(exposure, mop):
                 markers = aruco_detector.get_detected_marker_dict()                         
                 fingertips = aruco_to_fingertips.get_fingertips(markers)                    
                                                                                             
-                tag_6_pos = None                                                      
-                tag_5_pos = None                                                     
+                tag_6_pos = None
+                tag_6_frame = None                                                      
+                tag_5_pos = None  
+                tag_5_frame = None                                                 
                 for k in markers:                                                           
                     m = markers[k]                                                          
                     if k == 6:
-                        tag_6_pos = m['pos']                                          
+                        tag_6_pos = m['pos']
+                        tag_6_frame = m['z_axis']                                          
                     elif k == 5:
-                        tag_5_pos = m['pos']                                         
+                        tag_5_pos = m['pos']
+                        tag_5_frame = m['z_axis']                                         
                                                                                             
                 # Calculate midpoint if both markers detected (tag 6 on left, tag 5 on right)                               
                 if tag_6_pos is not None and tag_5_pos is not None:            
-                    toy_target = (tag_6_pos + tag_5_pos) / 2.0   
+                    toy_target = (tag_6_pos + tag_5_pos) / 2.0
+                    t_frame = tag_6_frame + tag_5_frame
+                    toy_target_frame = t_frame / np.linalg.norm(t_frame)
 
             print()
 
@@ -355,6 +362,7 @@ def main(exposure, mop):
 
             if (between_fingertips is not None) and (toy_target is not None):            
                 position_error = toy_target - between_fingertips
+                face_error = np.arctan2(toy_target_frame[0], toy_target_frame[2])
                 target_error = np.linalg.norm(position_error)
                 last_target_error = target_error  # Track for lock behavior
                 print('target_error = {:.2f} cm'.format(100.0 * target_error))
@@ -392,6 +400,15 @@ def main(exposure, mop):
                 elif (between_fingertips is not None) and (toy_target is not None) and (target_error <= max_distance_for_attempted_reach):            
 
                     x_error, y_error, z_error = position_error
+                    rotation_error = face_error
+                    roll = joint_state['wrist_roll_pos']
+                    c = np.cos(roll)
+                    s = np.sin(roll)
+
+                    normal = toy_target_frame
+                    normal_fixed = np.array([c * normal[0] + s * normal[1], -s * normal[0] + c * normal[1], normal[2]])
+                    x_fixed = c * x_error + s * y_error
+                    rotation_error = np.arctan2(normal_fixed[0], normal_fixed[2])
 
                     # Keep wrist yaw stable at 0 degrees instead of servoing
                     yaw_velocity = 0.0 - joint_state['wrist_yaw_pos']
@@ -415,12 +432,16 @@ def main(exposure, mop):
                     lift_velocity = np.dot(rotated_lift, position_error)
                     arm_velocity = np.dot(rotated_arm, position_error)
 
-                    base_movement = 0.0
-                    vel_scale = 10
-                    # TODO: adjust x_error threshold value
-                    if (abs(x_error) > 0.005):
-                        base_movement = vel_scale * -x_error
-                        np.clip(base_movement, -0.1, 0.1)
+                    k_face = 1.0
+                    k_base = 1.0
+                    max_rotation = 0.25
+                    rotation_tolerance = 0.05 # radians
+                    alignment_tolerance = 0.005 # meters
+
+                    base_rotational_vel = np.clip(-k_face * rotation_error, -max_rotation, max_rotation)
+                    base_movement = np.clip(-k_base * x_error, -1.0, 1.0)
+
+                    cmd = zero_vel.copy()
 
                     #base_rotational_velocity = np.dot(rotated_base, position_error) / (joint_state['arm_pos'] + max_gripper_length)
                     base_rotational_velocity = np.dot(rotated_base, position_error)
@@ -458,7 +479,12 @@ def main(exposure, mop):
                         if motion_on:
                             cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                             cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                            cmd['base_forward'] = base_movement
+                            if (abs(rotation_error) > rotation_tolerance):
+                                cmd['base_counterclockwise'] = base_rotational_vel
+                                print('Aligning with Station')
+                            elif (abs(x_fixed) > alignment_tolerance):
+                                cmd['base_forward'] = base_movement
+                                print('Horizontally Aligning with Station')
                             controller.set_command(cmd)
 
                 else:
