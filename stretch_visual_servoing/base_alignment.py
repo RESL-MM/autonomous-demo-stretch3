@@ -4,6 +4,9 @@ Base alignment using ArUco markers detected by head camera.
 Aligns robot base tags (#130, #131) with ground tags (#9, #10) in a straight line.
 """
 
+# 9 on the left, 10 on the right
+
+
 import numpy as np
 import cv2
 import time
