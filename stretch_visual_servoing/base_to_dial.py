@@ -29,6 +29,13 @@ joint_state_center = {
     'gripper_pos': 0
 }
 
+movement = {
+    'stage1_forward' : 1.11,
+    'stage1_rotate' : -np.pi/2,
+    'stage2_forward' : 2.0,
+    'stage3_forward' : 0.45,
+}
+
 def recenter_robot(robot):
     pan = np.pi/2.0
     tilt = -np.pi/2.0
@@ -51,7 +58,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_to(1.02)
+    robot.lift.move_to(joint_state_center['lift_pos'])
     robot.push_command()
     robot.wait_command()
     
@@ -61,10 +68,43 @@ def main():
     recenter_robot(robot)
 
     # Move forward 1 meter
-    robot.base.translate_by(1.0)
+    robot.base.translate_by(movement['stage1_forward'], v_m=0.3)
     robot.push_command()
     robot.wait_command()
-
+    
+    # Rotate right by 45 degrees
+    robot.base.rotate_by(movement['stage1_rotate'])
+    robot.push_command()
+    robot.wait_command()
+    
+    # Move forward 2 meter 
+    robot.base.translate_by(movement['stage2_forward'], v_m=0.3)
+    robot.push_command()
+    robot.wait_command()
+    
+    robot.base.translate_by(movement['stage3_forward'], v_m=0.3)
+    robot.push_command()
+    robot.wait_command()
+    
+    time.sleep(10.0)
+    
+    # reverse the movement  
+    robot.base.translate_by(-movement['stage3_forward'], v_m=0.3)
+    robot.push_command()
+    robot.wait_command()
+    
+    robot.base.translate_by(-movement['stage2_forward'], v_m=0.3)
+    robot.push_command()
+    robot.wait_command()
+    
+    robot.base.rotate_by(-movement['stage1_rotate'])
+    robot.push_command()
+    robot.wait_command()
+    
+    robot.base.translate_by(-movement['stage1_forward'], v_m=0.3)
+    robot.push_command()
+    robot.wait_command()
+    
     robot.stop()
 
 if __name__ == '__main__':
