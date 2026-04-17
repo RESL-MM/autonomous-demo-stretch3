@@ -64,7 +64,7 @@ stop_if_target_not_detected_this_many_frames = 10 #4 #1
 stop_if_fingers_not_detected_this_many_frames = 10 #4 #1
 
 # Lock behavior parameters
-lock_error_threshold = 0.25  # 25 cm - if we were this close before losing detection, proceed to lock
+lock_error_threshold = 0.1  # 25 cm - if we were this close before losing detection, proceed to lock
 
 # Defines a deadzone for mobile base rotation, since low values can
 # lead to no motion and noises on some surfaces like carpets.
@@ -78,7 +78,7 @@ min_base_speed = 0.05
 target_width_m = 0.0542
 
 # Distance threshold to trigger button press (lock behavior)
-grasp_if_error_below_this = 0.07
+grasp_if_error_below_this = 0.05
 
 # Gripper speed when opening at start
 gripper_open_speed = 1.0
@@ -101,8 +101,8 @@ overall_visual_servoing_velocity_scale = 0.5
 
 joint_visual_servoing_velocity_scale = {
     'base_counterclockwise' : 4.0,
-    'lift_up' : 6.0,
-    'arm_out' : 6.0,
+    'lift_up' : 2.0,
+    'arm_out' : 2.0,
     'wrist_yaw_counterclockwise' : 4.0,
     'wrist_pitch_up' : 6.0,
     'wrist_roll_counterclockwise': 1.0,
@@ -196,7 +196,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_to(1.2)
+    robot.lift.move_to(1.1)
     robot.push_command()
     robot.wait_command()
 
@@ -210,9 +210,9 @@ def main(exposure):
         
         robot = rb.Robot()
         robot.startup()
-        recenter_robot(robot)
         controller = nvc.NormalizedVelocityControl(robot)
         controller.reset_base_odometry()
+        recenter_robot(robot)
 
         marker_info = {}
         with open('aruco_marker_info.yaml') as f:
@@ -246,6 +246,7 @@ def main(exposure):
             loop_timer.start_of_iteration()
 
             toy_target = None
+            toy_target_frame = None
             fingertip_left_pos = None       
             fingertip_right_pos = None
             between_fingertips = None
@@ -284,21 +285,28 @@ def main(exposure):
                 markers = aruco_detector.get_detected_marker_dict()                         
                 fingertips = aruco_to_fingertips.get_fingertips(markers)                    
                                                                                             
-                button_left_pos = None                                                      
-                button_right_pos = None                                                     
+                button_left_pos = None
+                button_left_frame = None                                                      
+                button_right_pos = None
+                button_right_frame = None                                                     
                 for k in markers:                                                           
                     m = markers[k]                                                          
                     name = m['info']['name']                                                
                     if name == 'middle_dialbutton':                                               
-                        button_left_pos = m['pos']                                          
+                        button_left_pos = m['pos']       
+                        button_left_frame = m['z_axis']                                   
                     elif name == 'button_right':                                            
-                        button_right_pos = m['pos']                                         
+                        button_right_pos = m['pos']
+                        button_right_frame = m['z_axis']                                       
                                                                                             
                 # Calculate midpoint if both markers detected                               
-                if button_left_pos is not None and button_right_pos is not None:            
-                    toy_target = (button_left_pos + button_right_pos) / 2.0   
+                if button_left_pos is not None and button_right_pos is not None:   
+                    t_frame = (button_left_frame + button_right_frame) / 2.0
+                    toy_target_frame = t_frame / np.linalg.norm(t_frame)
+                    toy_target = (button_left_pos + button_right_pos) / 2.0 
 
-            print()
+            print(toy_target)
+            print(toy_target_frame)
 
             target_name = 'Button (ArUco)'
             if toy_target is None:
@@ -355,6 +363,7 @@ def main(exposure):
 
             if (between_fingertips is not None) and (toy_target is not None):            
                 position_error = toy_target - between_fingertips
+                face_error = np.arctan2(toy_target_frame[0], toy_target_frame[2])
                 target_error = np.linalg.norm(position_error)
                 last_target_error = target_error  # Track for lock behavior
                 print('target_error = {:.2f} cm'.format(100.0 * target_error))
@@ -392,15 +401,26 @@ def main(exposure):
                 elif (between_fingertips is not None) and (toy_target is not None) and (target_error <= max_distance_for_attempted_reach):            
 
                     x_error, y_error, z_error = position_error
+                    rotation_error = face_error
+                    roll = joint_state['wrist_roll_pos']
+                    c = np.cos(roll)
+                    s = np.sin(roll)
+                    print(f"old rotation: {rotation_error}")
 
-                    yaw_velocity = -x_error
-                    # pitch_velocity = -y_error
+                    normal = toy_target_frame
+                    normal_fixed = np.array([c * normal[0] + s * normal[1], -s * normal[0] + c * normal[1], normal[2]])
+                    x_fixed = c * x_error + s * y_error
+                    rotation_error = -np.arctan2(-normal_fixed[0],-normal_fixed[2])
+
+                    # Keep wrist yaw stable at 0 degrees instead of servoing
+                    yaw_velocity = 0.0 - joint_state['wrist_yaw_pos']
                     
-                    # Keep wrist pitch fixed at recenter_robot position
-                    pitch_velocity = 0.0
+                    target_pitch = joint_state_center['wrist_pitch_pos']
+                    pitch_velocity = target_pitch - joint_state['wrist_pitch_pos']
 
-                    # Keep wrist roll at 0 degrees
-                    roll_velocity = 0.0 - joint_state['wrist_roll_pos']
+                    # Keep wrist roll stable at 0 degrees during approach
+                    target_roll = 0.0
+                    roll_velocity = target_roll - joint_state['wrist_roll_pos']
 
                     # Transform camera frame errors into errors for the Cartesian joints
                     yaw = joint_state['wrist_yaw_pos']
@@ -414,18 +434,22 @@ def main(exposure):
                     lift_velocity = np.dot(rotated_lift, position_error)
                     arm_velocity = np.dot(rotated_arm, position_error)
 
+                    k_face = 1.0
+                    k_base = 10.0
+                    max_rotation = 0.25
+                    rotation_tolerance = 0.002 # radians
+                    alignment_tolerance = 0.002 # meters
+
+                    base_rotational_vel = np.clip(-k_face * rotation_error, -max_rotation, max_rotation)
+                    base_movement = np.clip(-k_base * x_error, -2.0, 2.0)
+
+                    cmd = zero_vel.copy()
+
                     #base_rotational_velocity = np.dot(rotated_base, position_error) / (joint_state['arm_pos'] + max_gripper_length)
                     base_rotational_velocity = np.dot(rotated_base, position_error)
                     #print('base_rotational_velocity =', base_rotational_velocity)
                     if abs(base_rotational_velocity) < min_base_speed:
                         base_rotational_velocity = 0.0
-
-                    base_movement = 0.0
-                    vel_scale = 5
-
-                    if (abs(x_error) > 0.003):
-                        base_movement = vel_scale * (-x_error)
-                        np.clip(base_movement, -0.1, 0.1)
 
                     #print('base_rotational_velocity =', base_rotational_velocity)
                     #print('base_odom_theta =', joint_state['base_odom_theta'])
@@ -455,9 +479,20 @@ def main(exposure):
                         cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
 
                         if motion_on:
-                            cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                            cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                            cmd['base_forward'] = base_movement
+                            print(rotation_error)
+                            print(x_error)
+                            print(x_fixed)        
+                            if (abs(rotation_error) > rotation_tolerance):
+                                cmd['base_counterclockwise'] = -base_rotational_vel
+                                print('Aligning with Station')
+
+                            if (abs(x_fixed) > alignment_tolerance):
+                                cmd['base_forward'] = base_movement
+                                print('Horizontally Aligning with Station')
+
+                            if not ((abs(rotation_error) > rotation_tolerance) or (abs(x_fixed) > alignment_tolerance)):
+                                cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                                cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                             controller.set_command(cmd)
 
                 else:

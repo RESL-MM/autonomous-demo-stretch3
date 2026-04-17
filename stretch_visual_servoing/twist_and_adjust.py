@@ -64,7 +64,7 @@ stop_if_target_not_detected_this_many_frames = 10 #4 #1
 stop_if_fingers_not_detected_this_many_frames = 10 #4 #1
 
 # Lock behavior parameters
-lock_error_threshold = 0.1  # 25 cm - if we were this close before losing detection, proceed to lock
+lock_error_threshold = 0.095  # 25 cm - if we were this close before losing detection, proceed to lock
 
 # Defines a deadzone for mobile base rotation, since low values can
 # lead to no motion and noises on some surfaces like carpets.
@@ -78,7 +78,7 @@ min_base_speed = 0.05
 target_width_m = 0.0542
 
 # Distance threshold to trigger button press (lock behavior)
-grasp_if_error_below_this = 0.1
+grasp_if_error_below_this = 0.095
 
 # Gripper speed when opening at start
 gripper_open_speed = 1.0
@@ -101,8 +101,8 @@ overall_visual_servoing_velocity_scale = 0.5
 
 joint_visual_servoing_velocity_scale = {
     'base_counterclockwise' : 4.0,
-    'lift_up' : 6.0,
-    'arm_out' : 6.0,
+    'lift_up' : 1.5,
+    'arm_out' : 1.5,
     'wrist_yaw_counterclockwise' : 4.0,
     'wrist_pitch_up' : 6.0,
     'wrist_roll_counterclockwise': 0.25,  # Slowed down for dial twisting
@@ -300,9 +300,12 @@ def main(exposure, mop):
                         tag_5_frame = m['z_axis']                                         
                                                                                             
                 # Calculate midpoint if both markers detected (tag 6 on left, tag 5 on right)                               
-                if tag_6_pos is not None and tag_5_pos is not None:            
-                    toy_target = (tag_6_pos + tag_5_pos) / 2.0
-                    t_frame = tag_6_frame + tag_5_frame
+                if tag_6_pos is not None and tag_5_pos is not None:    
+                    if mop == 1:
+                        toy_target = 0.52 * tag_6_pos + 0.48 * tag_5_pos
+                    else:
+                        toy_target = 0.65 * tag_5_pos + 0.35 * tag_6_pos
+                    t_frame = (tag_6_frame + tag_5_frame) / 2.0
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
 
             print()
@@ -404,11 +407,12 @@ def main(exposure, mop):
                     roll = joint_state['wrist_roll_pos']
                     c = np.cos(roll)
                     s = np.sin(roll)
+                    print(f"old rotation: {rotation_error}")
 
                     normal = toy_target_frame
                     normal_fixed = np.array([c * normal[0] + s * normal[1], -s * normal[0] + c * normal[1], normal[2]])
                     x_fixed = c * x_error + s * y_error
-                    rotation_error = np.arctan2(normal_fixed[0], normal_fixed[2])
+                    rotation_error = -np.arctan2(-normal_fixed[0],-normal_fixed[2])
 
                     # Keep wrist yaw stable at 0 degrees instead of servoing
                     yaw_velocity = 0.0 - joint_state['wrist_yaw_pos']
@@ -433,13 +437,13 @@ def main(exposure, mop):
                     arm_velocity = np.dot(rotated_arm, position_error)
 
                     k_face = 1.0
-                    k_base = 1.0
+                    k_base = 5.0
                     max_rotation = 0.25
                     rotation_tolerance = 0.05 # radians
                     alignment_tolerance = 0.005 # meters
 
                     base_rotational_vel = np.clip(-k_face * rotation_error, -max_rotation, max_rotation)
-                    base_movement = np.clip(-k_base * x_error, -1.0, 1.0)
+                    base_movement = np.clip(-k_base * x_error, -2.0, 2.0)
 
                     cmd = zero_vel.copy()
 
@@ -477,14 +481,23 @@ def main(exposure, mop):
                         cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
 
                         if motion_on:
-                            cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-                            cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                            print(rotation_error)
+                            print(x_error)
+                            print(x_fixed)        
                             if (abs(rotation_error) > rotation_tolerance):
-                                cmd['base_counterclockwise'] = base_rotational_vel
+                                cmd['base_counterclockwise'] = -base_rotational_vel
                                 print('Aligning with Station')
-                            elif (abs(x_fixed) > alignment_tolerance):
+
+                            if (abs(x_fixed) > alignment_tolerance):
                                 cmd['base_forward'] = base_movement
                                 print('Horizontally Aligning with Station')
+
+                            if not ((abs(rotation_error) > rotation_tolerance) or (abs(x_fixed) > alignment_tolerance)):
+                                cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+                                cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
+
+                            
+
                             controller.set_command(cmd)
 
                 else:
@@ -694,13 +707,15 @@ if __name__ == '__main__':
         description='This application demonstrates dial twisting using visual servoing with ArUco markers (tags 23 & 24) and the gripper-mounted D405.',
     )
     parser.add_argument('-e', '--exposure', action='store', type=str, default='low', help=f'Set the D405 exposure to {dh.exposure_keywords} or an integer in the range {dh.exposure_range}') 
-    parser.add_argument('--mop', type=str, choices=['open', 'close'], default='open', help='open or close the machine' )
+    parser.add_argument('--mop', type=str, choices=['open', 'close'], default='close', help='open or close the machine' )
     
     args = parser.parse_args()
     exposure = args.exposure
     mop = 1
-    if args.mop == 'close':
+    if args.mop == 'open':
         mop = -1
+
+    print(mop)
 
     if not dh.exposure_argument_is_valid(exposure):
         raise argparse.ArgumentTypeError(f'The provided exposure setting, {exposure}, is not a valide keyword, {dh.exposure_keywords}, or is outside of the allowed numeric range, {dh.exposure_range}.')    

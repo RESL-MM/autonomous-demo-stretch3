@@ -214,6 +214,9 @@ def main(exposure, mop):
         recenter_robot(robot)
         controller = nvc.NormalizedVelocityControl(robot)
         controller.reset_base_odometry()
+        
+        robot.head.move_to('head_pan', -np.pi/2)
+        robot.head.move_to('head_tilt', 0.0)
 
         marker_info = {}
         with open('aruco_marker_info.yaml') as f:
@@ -298,11 +301,12 @@ def main(exposure, mop):
                         wafer_station_norm = m['z_axis']     
 
                 if wafer_station_pos is not None:
-                    wafer_station = wafer_station_pos
-                    wafer_station_normal = wafer_station_norm / np.linalg.norm(wafer_station_norm)                 
+                    wafer_station = np.array([wafer_station_pos[1]-0.02, -wafer_station_pos[0], wafer_station_pos[2]])
+                    wafer_station_normal = np.array([wafer_station_norm[1], -wafer_station_norm[0], wafer_station_norm[2]])
+                    wafer_station_normal = wafer_station_normal / np.linalg.norm(wafer_station_normal)                 
                                                                                          
 
-            print()
+            print(wafer_station)
 
             target_name = 'Wafer Station Position'
             if wafer_station is None:
@@ -361,7 +365,7 @@ def main(exposure, mop):
             if wafer_station is not None:         
                 position_error = wafer_station # - between_fingertips
                 target_error = np.linalg.norm(position_error)
-                rotation_error = np.arctan2(wafer_station_normal[0], wafer_station_normal[2])
+                rotation_error = np.arctan2(-wafer_station_normal[0], -wafer_station_normal[2])
                 print('target_error = {:.2f} cm'.format(100.0 * target_error))
 
             print('behavior =', behavior)
@@ -397,10 +401,12 @@ def main(exposure, mop):
             # elif (between_fingertips is not None) and (toy_target is not None) and (target_error <= max_distance_for_attempted_reach): 
             elif wafer_station is not None:           
                 x_error, y_error, z_error = position_error
-                x_error = position_error[1]
-                y_error = -position_error[0]
-                z_error = position_error[2]
-                position_error = np.array([x_error, y_error, z_error])
+                # x_error = position_error[1]
+                # y_error = -position_error[0]
+                # z_error = position_error[2]
+                # position_error = np.array([x_error, y_error, z_error])
+                print(position_error)
+                print(rotation_error)
 
                 # Keep wrist yaw stable at 0 degrees instead of servoing
                 # yaw_velocity = 0.0 - joint_state['wrist_yaw_pos']
@@ -436,27 +442,25 @@ def main(exposure, mop):
                 # if arm_velocity < 0.0:
                 #     arm_velocity = arm_retraction_speedup * arm_velocity
 
-                k_face = 1.0
-                k_base = 1.0
-                max_rotation = 0.25
+                k_face = 5.0
+                k_base = 2.0
+                max_rotation = np.pi/6
                 rotation_tolerance = 0.1 # radians
                 alignment_tolerance = 0.025 # meters
 
-                base_rotational_vel = np.clip(-k_face * rotation_error, -max_rotation, max_rotation)
-                base_movement = np.clip(-k_base * x_error, -1.0, 1.0)
+                base_rotational_vel = np.clip(k_face * rotation_error, -max_rotation, max_rotation)
+                base_movement = np.clip(k_base * x_error, -1.0, 1.0)
 
                 cmd = zero_vel.copy()
 
                 if (abs(rotation_error) > rotation_tolerance):
                     cmd['base_counterclockwise'] = base_rotational_vel
-                    controller.set_command(cmd)
                     print('Aligning with Station')
-                elif (abs(x_error) > alignment_tolerance):
+                if (abs(x_error) > alignment_tolerance):
                     cmd['base_forward'] = base_movement
-                    controller.set_command(cmd)
                     print('Horizontally Aligning with Station')
-                else:
-                    break
+
+                controller.set_command(cmd)
 
                 # if target_error < grasp_if_error_below_this:
                 #     # Close enough - transition to lock behavior

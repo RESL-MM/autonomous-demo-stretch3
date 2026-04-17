@@ -77,7 +77,7 @@ def start_d435(exposure):
     #width, height, fps = 848, 480, 10
     #width, height, fps = 640, 480, 30
     #width, height, fps = 640, 480, 15
-    width, height, fps = 1280, 720, 5
+    width, height, fps = 848, 480, 30
     config.enable_stream(rs.stream.depth, width, height, rs.format.z16, fps)
     config.enable_stream(rs.stream.color, width, height, rs.format.bgr8, fps)
 
