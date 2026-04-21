@@ -16,13 +16,13 @@
   use_rgb_only: True
   name: 'finger_right'
   link: 'link_finger_right'
-'8':
-  length_mm: 65 # 43
+'9':
+  length_mm: 100 #65 # 43
   use_rgb_only: True
   name: 'tray'
   link: 'None'
 '7':
-  length_mm: 65 # 43
+  length_mm: 100 #65 # 43
   use_rgb_only: True
   name: 'wafer_station'
   link: 'None'

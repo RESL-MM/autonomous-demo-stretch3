@@ -17,12 +17,12 @@ import argparse
 import d405_helpers as dh
 import d435_helpers as d435h
 
-FROM_MACHINE_TO_WTABLE = 1.9
+FROM_MACHINE_TO_WTABLE = 2.1
 QUARTER_COUNTERCLOCK = math.pi/2
 QUARTER_CLOCK = -QUARTER_COUNTERCLOCK
 NEXT_TO_MACHINE_OR_TRAY = 0.80
-FROM_WTABLE_TO_TRAY = 0.85
-FROM_TRAY_TO_MACHINE = 1.05
+FROM_WTABLE_TO_TRAY = 1
+FROM_TRAY_TO_MACHINE = 1.2
 
 def default_gripper():
     robot = rb.Robot()
@@ -33,13 +33,17 @@ def default_gripper():
     robot.end_of_arm.move_to('stretch_gripper', 50) # [-100, 100] => [fully closed, fully open]
     robot.push_command()
     robot.wait_command()
+    robot.stop()
 
 def move(distance: float):
     robot = rb.Robot()
     robot.startup()
+    robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
+    robot.end_of_arm.move_to('wrist_pitch', 0.0)
     robot.base.translate_by(distance, v_m=0.5)
     robot.push_command()
     print(f"waited for move by {distance}m command? {robot.wait_command(timeout=60.0)}")
+    robot.stop()
 
 def rotate(angle: float):
     robot = rb.Robot()
@@ -47,10 +51,7 @@ def rotate(angle: float):
     robot.base.rotate_by(angle)
     robot.push_command()
     print(f"waited for move by {angle}m command? {robot.wait_command()}")
-
-def head_facing(pan: float, tilt: float):
-    robot = rb.Robot()
-    robot.startup()
+    robot.stop()
 
 def do_dw_pupd(dw=True, put_down=False):
     STOW_ANGLE = (3 * math.pi)/4
@@ -58,13 +59,13 @@ def do_dw_pupd(dw=True, put_down=False):
 
     # deposit/withdraw values
     DW_HEIGHT = 1.05
-    DW_LENGTH = 0.25
+    DW_LENGTH = 0.35
     PUPD_DIST = 0.02
 
     if not dw:
         # pick up/put down values
         DW_HEIGHT = 0.98
-        DW_LENGTH = 0.3
+        DW_LENGTH = 0.1
         PUPD_DIST = 0.08
 
     print(f"{DW_HEIGHT}, {DW_LENGTH}, {PUPD_DIST}")
@@ -106,6 +107,8 @@ def do_dw_pupd(dw=True, put_down=False):
     robot.wait_command()
 
     robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
+
+    robot.stop()
 
 
 def main():
@@ -150,6 +153,7 @@ def main():
 
     print('=== Going to Pick Up Wafer ===')
     move(-FROM_MACHINE_TO_WTABLE)
+    rotate(QUARTER_CLOCK)
 
     print('=== Pausing for 1 sec ===')
     time.sleep(1.0)
@@ -162,17 +166,31 @@ def main():
     if result.returncode != 0:
         print(f'Wafer station alignment exited with code {result.returncode}')
 
+    rotate(QUARTER_COUNTERCLOCK)
+
+    result = subprocess.run(
+        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'wafer_station', '--horizontal'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'Wafer station alignment exited with code {result.returncode}')
+
     print('=== Picking Up Wafer ===')
     do_dw_pupd(False, False)
 
     print('=== Moving to Tray ===')
-    move(FROM_WTABLE_TO_TRAY)
+    result = subprocess.run(
+        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'tray'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'Wafer station alignment exited with code {result.returncode}')
+
     rotate(QUARTER_COUNTERCLOCK)
-    move(-0.5)
 
     print('=== Aligning with Tray ===')
     result = subprocess.run(
-        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'tray'],
+        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'tray', '--horizontal'],
         cwd=sys.path[0] or '.',
     )
     if result.returncode != 0:
@@ -182,7 +200,7 @@ def main():
     do_dw_pupd(True, True)
 
     print('=== Moving to Machine ===')
-    move(0.5)
+    move(0.9)
     rotate(QUARTER_CLOCK)
     move(FROM_TRAY_TO_MACHINE)
 
@@ -218,15 +236,22 @@ def main():
     if result.returncode != 0:
         print(f'Dial twisting demo exited with code {result.returncode}')
 
+    result = subprocess.run(
+        [sys.executable, 'button_pressing_demo.py', '-e', exposure],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'Button pressing demo exited with code {result.returncode}')
+
 
     print('=== Moving to Tray ===')
     move(-FROM_TRAY_TO_MACHINE)
     rotate(QUARTER_COUNTERCLOCK)
-    move(-0.5)
+    move(-0.9)
 
     print('=== Aligning with Tray ===')
     result = subprocess.run(
-        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'tray'],
+        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'tray', '--horizontal'],
         cwd=sys.path[0] or '.',
     )
     if result.returncode != 0:
@@ -236,13 +261,24 @@ def main():
     do_dw_pupd(True, False)
 
     print('=== Moving to Wafer Station ===')
-    move(0.5)
+    move(0.9)
     rotate(QUARTER_CLOCK)
     move(-FROM_WTABLE_TO_TRAY)
+    rotate(QUARTER_CLOCK)
+
+    print('=== Going to with Wafer Station ==')
+    result = subprocess.run(
+        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'wafer_station'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'Wafer station alignment exited with code {result.returncode}')
+
+    rotate(QUARTER_COUNTERCLOCK)
 
     print('=== Aligning with Wafer Station ==')
     result = subprocess.run(
-        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'wafer_station'],
+        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'wafer_station', '--horizontal'],
         cwd=sys.path[0] or '.',
     )
     if result.returncode != 0:
@@ -252,6 +288,9 @@ def main():
     do_dw_pupd(False, True)
 
     print('=== Going to Machine ===')
+    rotate(QUARTER_COUNTERCLOCK)
+    move(0.95)
+    rotate(QUARTER_CLOCK)
     move(FROM_MACHINE_TO_WTABLE)
 
     print('=== Closing Machine ===')

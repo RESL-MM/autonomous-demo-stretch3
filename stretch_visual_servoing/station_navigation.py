@@ -188,8 +188,8 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.end_of_arm.get_joint('wrist_yaw').move_to(joint_state_center['wrist_yaw_pos'])
-    robot.end_of_arm.get_joint('wrist_pitch').move_to(joint_state_center['wrist_pitch_pos'])
+    robot.end_of_arm.get_joint('wrist_yaw').move_to(3 * np.pi/4)
+    robot.end_of_arm.get_joint('wrist_pitch').move_to(0.0)
     robot.push_command()
     robot.wait_command()
     
@@ -197,7 +197,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_to(1.02)
+    robot.lift.move_to(0.9)
     robot.push_command()
     robot.wait_command()
 
@@ -206,7 +206,7 @@ def recenter_robot(robot):
     # robot.wait_command()
         
 
-def main(exposure, tag_name):
+def main(exposure, tag_name, horizontal_align=True):
     try:
         
         robot = rb.Robot()
@@ -215,7 +215,10 @@ def main(exposure, tag_name):
         controller = nvc.NormalizedVelocityControl(robot)
         controller.reset_base_odometry()
         
-        robot.head.move_to('head_pan', -np.pi/2)
+        if horizontal_align:
+            robot.head.move_to('head_pan', -np.pi/2)
+        else:
+            robot.head.move_to('head_pan', 0.0)
         robot.head.move_to('head_tilt', 0.0)
 
         marker_info = {}
@@ -447,18 +450,33 @@ def main(exposure, tag_name):
                 max_rotation = np.pi/6
                 rotation_tolerance = 0.1 # radians
                 alignment_tolerance = 0.025 # meters
+                station_tolerance = 0.9
 
                 base_rotational_vel = np.clip(k_face * rotation_error, -max_rotation, max_rotation)
                 base_movement = np.clip(k_base * x_error, -1.0, 1.0)
+                base_station_movement = np.clip(k_base * z_error, -1.0, 1.0)
+
+                reached = True
 
                 cmd = zero_vel.copy()
 
                 if (abs(rotation_error) > rotation_tolerance):
                     cmd['base_counterclockwise'] = base_rotational_vel
                     print('Aligning with Station')
-                if (abs(x_error) > alignment_tolerance):
+                    reached = False
+                
+                if (abs(x_error) > alignment_tolerance and horizontal_align):
                     cmd['base_forward'] = base_movement
                     print('Horizontally Aligning with Station')
+                    reached = False
+
+                if (abs(z_error) > station_tolerance and not horizontal_align):
+                    cmd['base_forward'] = base_station_movement
+                    print('Moving to Station')
+                    reached = False
+
+                if reached:
+                    break
 
                 controller.set_command(cmd)
 
@@ -687,13 +705,17 @@ if __name__ == '__main__':
         description='This application demonstrates dial twisting using visual servoing with ArUco markers (tags 23 & 24) and the gripper-mounted D405.',
     )
     parser.add_argument('-e', '--exposure', action='store', type=str, default='low', help=f'Set the D405 exposure to {dh.exposure_keywords} or an integer in the range {dh.exposure_range}') 
-    parser.add_argument('--tag_name', type=str, choices=['wafer_station', 'tray'], default='wafer_station', help='align with wafer station or tray' )
+    parser.add_argument('--tag_name', type=str, choices=['wafer_station', 'tray'], default='wafer_station', help='align with wafer station or tray')
+    parser.add_argument('--horizontal', action='store_true', help='align robot horizontally with a tag or move towards it')
     
     args = parser.parse_args()
     exposure = args.exposure
     tag_name = args.tag_name
+    horizontal = args.horizontal
+
+    print(horizontal)
 
     if not dh.exposure_argument_is_valid(exposure):
         raise argparse.ArgumentTypeError(f'The provided exposure setting, {exposure}, is not a valide keyword, {dh.exposure_keywords}, or is outside of the allowed numeric range, {dh.exposure_range}.')    
     
-    main(exposure, tag_name)
+    main(exposure, tag_name, horizontal)

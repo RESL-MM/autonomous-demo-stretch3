@@ -302,9 +302,9 @@ def main(exposure, mop):
                 # Calculate midpoint if both markers detected (tag 6 on left, tag 5 on right)                               
                 if tag_6_pos is not None and tag_5_pos is not None:    
                     if mop == 1:
-                        toy_target = 0.52 * tag_6_pos + 0.48 * tag_5_pos
+                        toy_target = 0.6 * tag_6_pos + 0.4 * tag_5_pos
                     else:
-                        toy_target = 0.65 * tag_5_pos + 0.35 * tag_6_pos
+                        toy_target = 0.64 * tag_5_pos + 0.36 * tag_6_pos
                     t_frame = (tag_6_frame + tag_5_frame) / 2.0
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
 
