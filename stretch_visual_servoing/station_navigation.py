@@ -206,7 +206,7 @@ def recenter_robot(robot):
     # robot.wait_command()
         
 
-def main(exposure, mop):
+def main(exposure, tag_name):
     try:
         
         robot = rb.Robot()
@@ -296,7 +296,7 @@ def main(exposure, mop):
                     m = markers[k]                                                          
                     name = m['info']['name']
 
-                    if name == 'wafer_station':
+                    if name == tag_name:
                         wafer_station_pos = m['pos']  
                         wafer_station_norm = m['z_axis']     
 
@@ -308,7 +308,7 @@ def main(exposure, mop):
 
             print(wafer_station)
 
-            target_name = 'Wafer Station Position'
+            target_name = tag_name
             if wafer_station is None:
                 print(target_name + ' Detection: FAILED')
             else:
@@ -687,15 +687,13 @@ if __name__ == '__main__':
         description='This application demonstrates dial twisting using visual servoing with ArUco markers (tags 23 & 24) and the gripper-mounted D405.',
     )
     parser.add_argument('-e', '--exposure', action='store', type=str, default='low', help=f'Set the D405 exposure to {dh.exposure_keywords} or an integer in the range {dh.exposure_range}') 
-    parser.add_argument('--mop', type=str, choices=['open', 'close'], default='open', help='open or close the machine' )
+    parser.add_argument('--tag_name', type=str, choices=['wafer_station', 'tray'], default='wafer_station', help='align with wafer station or tray' )
     
     args = parser.parse_args()
     exposure = args.exposure
-    mop = 1
-    if args.mop == 'close':
-        mop = -1
+    tag_name = args.tag_name
 
     if not dh.exposure_argument_is_valid(exposure):
         raise argparse.ArgumentTypeError(f'The provided exposure setting, {exposure}, is not a valide keyword, {dh.exposure_keywords}, or is outside of the allowed numeric range, {dh.exposure_range}.')    
     
-    main(exposure, mop)
+    main(exposure, tag_name)
