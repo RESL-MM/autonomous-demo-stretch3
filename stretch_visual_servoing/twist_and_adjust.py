@@ -302,7 +302,7 @@ def main(exposure, mop):
                 # Calculate midpoint if both markers detected (tag 6 on left, tag 5 on right)                               
                 if tag_6_pos is not None and tag_5_pos is not None:    
                     if mop == 1:
-                        toy_target = 0.6 * tag_6_pos + 0.4 * tag_5_pos
+                        toy_target = 0.67 * tag_6_pos + 0.33 * tag_5_pos
                     else:
                         toy_target = 0.64 * tag_5_pos + 0.36 * tag_6_pos
                     t_frame = (tag_6_frame + tag_5_frame) / 2.0
@@ -487,12 +487,12 @@ def main(exposure, mop):
                             # if (abs(rotation_error) > rotation_tolerance):
                             #     cmd['base_counterclockwise'] = -base_rotational_vel
                             #     print('Aligning with Station')
-
                             if (abs(x_fixed) > alignment_tolerance):
                                 cmd['base_forward'] = base_movement
                                 print('Horizontally Aligning with Station')
 
-                            if not ((abs(rotation_error) > rotation_tolerance) or (abs(x_fixed) > alignment_tolerance)):
+                            #if not ((abs(rotation_error) > rotation_tolerance) or (abs(x_fixed) > alignment_tolerance)):
+                            if not (abs(x_fixed) > alignment_tolerance):
                                 cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                                 cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
 

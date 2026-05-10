@@ -35,11 +35,12 @@ def default_gripper():
     robot.wait_command()
     robot.stop()
 
-def move(distance: float):
+def move(distance: float, stow_grip=False):
     robot = rb.Robot()
     robot.startup()
-    robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
-    robot.end_of_arm.move_to('wrist_pitch', 0.0)
+    if stow_grip:
+        robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
+        robot.end_of_arm.move_to('wrist_pitch', 0.0)
     robot.base.translate_by(distance, v_m=0.5)
     robot.push_command()
     print(f"waited for move by {distance}m command? {robot.wait_command(timeout=60.0)}")
@@ -130,7 +131,7 @@ def main():
             f'{dh.exposure_keywords}, or is outside of the allowed numeric range, {dh.exposure_range}.'
         )
     
-    printf('=== Aligning with Machine ===')
+    print('=== Aligning with Machine ===')
     result = subprocess.run(
         [sys.executable, 'base_alignment.py'],
         cwd=sys.path[0] or '.',
@@ -138,16 +139,28 @@ def main():
     if result.returncode != 0:
         print(f'base alignment done? {result.returncode}')
 
+    move(0.12)
+
     print('=== Opening the Machine ===')
     result = subprocess.run(
         [sys.executable, 'twist_and_adjust.py', '-e', exposure, '--mop', 'open'],
         cwd=sys.path[0] or '.',
     )
     if result.returncode != 0:
-        print(f'Dial twisting demo exited with code {result.returncode}')
+        print(f'Dial twisting demo exited with code {result.returncode}')\
+        
+    move(-0.25)
+
+    print('=== Aligning with Machine ===')
+    result = subprocess.run(
+        [sys.executable, 'base_alignment.py'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'base alignment done? {result.returncode}')
 
     print('=== Moving to Push Button ===')
-    move(-0.095)
+    move(-0.02)
 
     print('=== Pausing for 1 second ===')
     time.sleep(1.0)

@@ -77,8 +77,11 @@ class BaseAligner:
 
         self.robot.head.move_to('head_pan', pan)
         self.robot.head.move_to('head_tilt', tilt)
+        self.robot.lift.move_to(1.1)
+        self.robot.arm.move_to(0.0)
         self.robot.push_command()
         self.robot.wait_command()
+        self.robot.end_of_arm.move_to('wrist_yaw', 0.0)
         time.sleep(0.5)
 
     def detect_markers(self, pipeline, aruco_detector, num_samples=5):
@@ -240,12 +243,12 @@ class BaseAligner:
         print(f"  Lateral: {lateral * 100:.1f} cm")
 
         # Ask for confirmation before moving
-        response = input("\nExecute this correction? [y/n/q]: ").strip().lower()
-        if response == 'q':
-            raise KeyboardInterrupt("User quit")
-        if response != 'y':
-            print("Skipping correction...")
-            return
+        #response = input("\nExecute this correction? [y/n/q]: ").strip().lower()
+        # if response == 'q':
+        #     raise KeyboardInterrupt("User quit")
+        # if response != 'y':
+        #     print("Skipping correction...")
+        #     return
 
         # First correct rotation (small amounts only)
         if abs(rotation) > self.angle_threshold / 2:

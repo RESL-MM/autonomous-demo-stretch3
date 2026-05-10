@@ -435,7 +435,7 @@ def main(exposure):
                     arm_velocity = np.dot(rotated_arm, position_error)
 
                     k_face = 1.0
-                    k_base = 10.0
+                    k_base = 5.0
                     max_rotation = 0.25
                     rotation_tolerance = 0.002 # radians
                     alignment_tolerance = 0.002 # meters
