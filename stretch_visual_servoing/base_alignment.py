@@ -31,22 +31,22 @@ MARKER_INFO = {
         'name': 'default_marker'
     },
     '9': {
-        'length_mm': 50,
+        'length_mm': 42.5,
         'use_rgb_only': False,
         'name': 'ground_left'
     },
     '10': {
-        'length_mm': 50,
+        'length_mm': 42.5,
         'use_rgb_only': False,
         'name': 'ground_right'
     },
     '130': {
-        'length_mm': 50,
+        'length_mm': 48,
         'use_rgb_only': False,
         'name': 'base_left'
     },
     '131': {
-        'length_mm': 50,
+        'length_mm': 48,
         'use_rgb_only': False,
         'name': 'base_right'
     }
