@@ -324,16 +324,16 @@ class BaseAligner:
 
 def main():
     """Test alignment functionality."""
-    print("=" * 50)
-    print("Base Alignment Test")
-    print("=" * 50)
-    print("\nRequired markers:")
-    print("  Ground: #9 (left), #10 (right) - 5cm x 5cm")
-    print("  Base: #130 (left), #131 (right)")
-    print("\nPlace ground markers on floor, on left and right sides")
-    print("of where you want the robot to align.")
+    # print("=" * 50)
+    # print("Base Alignment Test")
+    # print("=" * 50)
+    # print("\nRequired markers:")
+    # print("  Ground: #9 (left), #10 (right) - 5cm x 5cm")
+    # print("  Base: #130 (left), #131 (right)")
+    # print("\nPlace ground markers on floor, on left and right sides")
+    # print("of where you want the robot to align.")
 
-    input("\nPress Enter to start...")
+    # input("\nPress Enter to start...")
 
     # Initialize robot
     print("\nStarting robot...")

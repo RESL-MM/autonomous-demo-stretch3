@@ -484,9 +484,9 @@ def main(exposure, mop):
                             print(rotation_error)
                             print(x_error)
                             print(x_fixed)        
-                            if (abs(rotation_error) > rotation_tolerance):
-                                cmd['base_counterclockwise'] = -base_rotational_vel
-                                print('Aligning with Station')
+                            # if (abs(rotation_error) > rotation_tolerance):
+                            #     cmd['base_counterclockwise'] = -base_rotational_vel
+                            #     print('Aligning with Station')
 
                             if (abs(x_fixed) > alignment_tolerance):
                                 cmd['base_forward'] = base_movement
