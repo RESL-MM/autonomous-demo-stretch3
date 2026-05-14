@@ -304,6 +304,14 @@ def main(exposure):
                     t_frame = (button_left_frame + button_right_frame) / 2.0
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
                     toy_target = (button_left_pos + button_right_pos) / 2.0 
+                elif button_left_pos is not None:
+                    toy_target = button_left_pos + np.array([0.06, 0, 0])
+                    t_frame = button_left_frame
+                    toy_target_frame = t_frame / np.linalg.norm(t_frame)
+                elif button_right_pos is not None:
+                    toy_target = button_right_pos - np.array([0.06, 0, 0])
+                    t_frame = button_right_frame
+                    toy_target_frame = t_frame / np.linalg.norm(t_frame)
 
             print(toy_target)
             print(toy_target_frame)
@@ -437,7 +445,7 @@ def main(exposure):
                     k_face = 1.0
                     k_base = 5.0
                     max_rotation = 0.25
-                    rotation_tolerance = 0.002 # radians
+                    rotation_tolerance = 0.0025 # radians
                     alignment_tolerance = 0.002 # meters
 
                     base_rotational_vel = np.clip(-k_face * rotation_error, -max_rotation, max_rotation)
@@ -482,9 +490,9 @@ def main(exposure):
                             print(rotation_error)
                             print(x_error)
                             print(x_fixed)        
-                            # if (abs(rotation_error) > rotation_tolerance):
-                            #     cmd['base_counterclockwise'] = -base_rotational_vel
-                            #     print('Aligning with Station')
+                            if (abs(rotation_error) > rotation_tolerance):
+                                cmd['base_counterclockwise'] = -base_rotational_vel
+                                print('Aligning with Station')
 
                             if (abs(x_fixed) > alignment_tolerance):
                                 cmd['base_forward'] = base_movement

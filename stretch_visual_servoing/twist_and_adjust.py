@@ -64,7 +64,7 @@ stop_if_target_not_detected_this_many_frames = 10 #4 #1
 stop_if_fingers_not_detected_this_many_frames = 10 #4 #1
 
 # Lock behavior parameters
-lock_error_threshold = 0.095  # 25 cm - if we were this close before losing detection, proceed to lock
+lock_error_threshold = 0.09  # 25 cm - if we were this close before losing detection, proceed to lock
 
 # Defines a deadzone for mobile base rotation, since low values can
 # lead to no motion and noises on some surfaces like carpets.
@@ -78,7 +78,7 @@ min_base_speed = 0.05
 target_width_m = 0.0542
 
 # Distance threshold to trigger button press (lock behavior)
-grasp_if_error_below_this = 0.095
+grasp_if_error_below_this = 0.09
 
 # Gripper speed when opening at start
 gripper_open_speed = 1.0
@@ -300,26 +300,21 @@ def main(exposure, mop):
                         tag_5_frame = m['z_axis']                                         
                                                                                             
                 # Calculate midpoint if both markers detected (tag 6 on left, tag 5 on right)
-                # TODO: test and adjust hardcoded offset values                               
+                # TODO: test and adjust hardcoded offset values      
+                # # tag 6 is 3.5cm to the left of dial center, tag 5 is 4.5cm to right of dial center                         
                 if tag_6_pos is not None and tag_5_pos is not None:    
                     if mop == 1:
                         toy_target = 0.67 * tag_6_pos + 0.33 * tag_5_pos
                     else:
-                        toy_target = 0.36 * tag_6_pos + 0.64 * tag_5_pos
+                        toy_target = 0.38 * tag_6_pos + 0.62 * tag_5_pos
                     t_frame = (tag_6_frame + tag_5_frame) / 2.0
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
                 elif tag_6_pos is not None:
-                    if mop == 1:
-                        toy_target = tag_6_pos + np.array([0.05, 0, 0])
-                    else:
-                        toy_target = tag_6_pos + np.array([0.1, 0, 0])
+                    toy_target = tag_6_pos + np.array([0.035, 0, 0])
                     t_frame = tag_6_frame
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
                 elif tag_5_pos is not None:
-                    if mop == 1:
-                        toy_target = tag_5_pos - np.array([0.1, 0, 0])
-                    else:
-                        toy_target = tag_5_pos - np.array([0.05, 0, 0])
+                    toy_target = tag_5_pos - np.array([0.045, 0, 0])
                     t_frame = tag_5_frame
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
 
@@ -455,7 +450,7 @@ def main(exposure, mop):
                     k_face = 1.0
                     k_base = 5.0
                     max_rotation = 0.25
-                    rotation_tolerance = 0.05 # radians
+                    rotation_tolerance = 0.001 # radians
                     alignment_tolerance = 0.005 # meters
 
                     base_rotational_vel = np.clip(-k_face * rotation_error, -max_rotation, max_rotation)
@@ -500,15 +495,15 @@ def main(exposure, mop):
                             print(rotation_error)
                             print(x_error)
                             print(x_fixed)        
-                            # if (abs(rotation_error) > rotation_tolerance):
-                            #     cmd['base_counterclockwise'] = -base_rotational_vel
-                            #     print('Aligning with Station')
+                            if (abs(rotation_error) > rotation_tolerance):
+                                cmd['base_counterclockwise'] = -base_rotational_vel
+                                print('Aligning with Station')
                             if (abs(x_fixed) > alignment_tolerance):
                                 cmd['base_forward'] = base_movement
                                 print('Horizontally Aligning with Station')
 
-                            #if not ((abs(rotation_error) > rotation_tolerance) or (abs(x_fixed) > alignment_tolerance)):
-                            if not (abs(x_fixed) > alignment_tolerance):
+                            if not ((abs(rotation_error) > rotation_tolerance) or (abs(x_fixed) > alignment_tolerance)):
+                            #if not (abs(x_fixed) > alignment_tolerance):
                                 cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                                 cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
 

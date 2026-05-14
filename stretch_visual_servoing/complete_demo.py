@@ -22,7 +22,7 @@ QUARTER_COUNTERCLOCK = math.pi/2
 QUARTER_CLOCK = -QUARTER_COUNTERCLOCK
 NEXT_TO_MACHINE_OR_TRAY = 0.80
 FROM_WTABLE_TO_TRAY = 1
-FROM_TRAY_TO_MACHINE = 1.2
+FROM_TRAY_TO_MACHINE = 1.0
 
 def default_gripper():
     robot = rb.Robot()
@@ -130,103 +130,154 @@ def main():
             f'{dh.exposure_keywords}, or is outside of the allowed numeric range, {dh.exposure_range}.'
         )
 
-    print('=== Opening the Machine ===')
+    # print('=== Aligning with Machine ===')
+    # result = subprocess.run(
+    #     [sys.executable, 'base_alignment.py'],
+    #     cwd=sys.path[0] or '.',
+    # )
+    # if result.returncode != 0:
+    #     print(f'base alignment done? {result.returncode}')
+
+    # move(0.12)
+
+    # print('=== Opening the Machine ===')
+    # result = subprocess.run(
+    #     [sys.executable, 'twist_and_adjust.py', '-e', exposure, '--mop', 'open'],
+    #     cwd=sys.path[0] or '.',
+    # )
+    # if result.returncode != 0:
+    #     print(f'Dial twisting demo exited with code {result.returncode}')\
+        
+    # move(-0.25)
+
+    # print('=== Aligning with Machine ===')
+    # result = subprocess.run(
+    #     [sys.executable, 'base_alignment.py'],
+    #     cwd=sys.path[0] or '.',
+    # )
+    # if result.returncode != 0:
+    #     print(f'base alignment done? {result.returncode}')
+
+    # print('=== Moving to Push Button ===')
+    # move(-0.02)
+
+    # print('=== Pausing for 1 second ===')
+    # time.sleep(1.0)
+
+    # result = subprocess.run(
+    #     [sys.executable, 'button_and_adjust.py', '-e', exposure],
+    #     cwd=sys.path[0] or '.',
+    # )
+    # if result.returncode != 0:
+    #     print(f'Button pressing demo exited with code {result.returncode}')
+
+    # print('=== Going to Pick Up Wafer ===')
+    # move(-FROM_MACHINE_TO_WTABLE)
+    # rotate(QUARTER_CLOCK)
+
+    # print('=== Pausing for 1 sec ===')
+    # time.sleep(1.0)
+
+    # print('=== Aligning with Wafer Station ==')
+    # result = subprocess.run(
+    #     [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'wafer_station'],
+    #     cwd=sys.path[0] or '.',
+    # )
+    # if result.returncode != 0:
+    #     print(f'Wafer station alignment exited with code {result.returncode}')
+
+    # rotate(QUARTER_COUNTERCLOCK)
+
+    # result = subprocess.run(
+    #     [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'wafer_station', '--horizontal'],
+    #     cwd=sys.path[0] or '.',
+    # )
+    # if result.returncode != 0:
+    #     print(f'Wafer station alignment exited with code {result.returncode}')
+
+    # print('=== Picking Up Wafer ===')
+    # do_dw_pupd(False, False)
+
+    # print('=== Moving to Tray ===')
+    # result = subprocess.run(
+    #     [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'tray'],
+    #     cwd=sys.path[0] or '.',
+    # )
+    # if result.returncode != 0:
+    #     print(f'Wafer station alignment exited with code {result.returncode}')
+
+    # rotate(QUARTER_COUNTERCLOCK)
+
+    # print('=== Aligning with Tray ===')
+    # result = subprocess.run(
+    #     [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'tray', '--horizontal'],
+    #     cwd=sys.path[0] or '.',
+    # )
+    # if result.returncode != 0:
+    #     print(f'Wafer station alignment exited with code {result.returncode}')
+
+    # print('=== Depositing Wafer ===')
+    # do_dw_pupd(True, True)
+
+    # print('=== Moving to Machine ===')
+    # move(0.9)
+    # rotate(QUARTER_CLOCK)
+    # move(FROM_TRAY_TO_MACHINE)
+
+    print('=== Aligning with Machine ===')
     result = subprocess.run(
-        [sys.executable, 'twist_and_adjust.py', '-e', exposure, '--mop', 'open'],
+        [sys.executable, 'base_alignment.py'],
         cwd=sys.path[0] or '.',
     )
     if result.returncode != 0:
-        print(f'Dial twisting demo exited with code {result.returncode}')
+        print(f'base alignment done? {result.returncode}')
 
-    print('=== Moving to Push Button ===')
-    move(-0.095)
+    move(0.12)
 
-    print('=== Pausing for 1 second ===')
-    time.sleep(1.0)
-
-    result = subprocess.run(
-        [sys.executable, 'button_pressing_demo.py', '-e', exposure],
-        cwd=sys.path[0] or '.',
-    )
-    if result.returncode != 0:
-        print(f'Button pressing demo exited with code {result.returncode}')
-
-    print('=== Going to Pick Up Wafer ===')
-    move(-FROM_MACHINE_TO_WTABLE)
-    rotate(QUARTER_CLOCK)
-
-    print('=== Pausing for 1 sec ===')
-    time.sleep(1.0)
-
-    print('=== Aligning with Wafer Station ==')
-    result = subprocess.run(
-        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'wafer_station'],
-        cwd=sys.path[0] or '.',
-    )
-    if result.returncode != 0:
-        print(f'Wafer station alignment exited with code {result.returncode}')
-
-    rotate(QUARTER_COUNTERCLOCK)
-
-    result = subprocess.run(
-        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'wafer_station', '--horizontal'],
-        cwd=sys.path[0] or '.',
-    )
-    if result.returncode != 0:
-        print(f'Wafer station alignment exited with code {result.returncode}')
-
-    print('=== Picking Up Wafer ===')
-    do_dw_pupd(False, False)
-
-    print('=== Moving to Tray ===')
-    result = subprocess.run(
-        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'tray'],
-        cwd=sys.path[0] or '.',
-    )
-    if result.returncode != 0:
-        print(f'Wafer station alignment exited with code {result.returncode}')
-
-    rotate(QUARTER_COUNTERCLOCK)
-
-    print('=== Aligning with Tray ===')
-    result = subprocess.run(
-        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'tray', '--horizontal'],
-        cwd=sys.path[0] or '.',
-    )
-    if result.returncode != 0:
-        print(f'Wafer station alignment exited with code {result.returncode}')
-
-    print('=== Depositing Wafer ===')
-    do_dw_pupd(True, True)
-
-    print('=== Moving to Machine ===')
-    move(0.9)
-    rotate(QUARTER_CLOCK)
-    move(FROM_TRAY_TO_MACHINE)
-
-    print('=== Closing Machine ===')
+    print('=== Closing the Machine ===')
     result = subprocess.run(
         [sys.executable, 'twist_and_adjust.py', '-e', exposure, '--mop', 'close'],
         cwd=sys.path[0] or '.',
     )
     if result.returncode != 0:
-        print(f'Dial twisting demo exited with code {result.returncode}')
+        print(f'Dial twisting demo exited with code {result.returncode}')\
+        
+    move(-0.25)
+
+    print('=== Aligning with Machine ===')
+    result = subprocess.run(
+        [sys.executable, 'base_alignment.py'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'base alignment done? {result.returncode}')
 
     print('=== Moving to Push Button ===')
-    move(-0.095)
+    move(-0.02)
 
     print('=== Pausing for 1 second ===')
     time.sleep(1.0)
 
     result = subprocess.run(
-        [sys.executable, 'button_pressing_demo.py', '-e', exposure],
+        [sys.executable, 'button_and_adjust.py', '-e', exposure],
         cwd=sys.path[0] or '.',
     )
     if result.returncode != 0:
         print(f'Button pressing demo exited with code {result.returncode}')
 
+    # HEILUHWUHF
     
     time.sleep(5) # simulate waiting for recipe to run-- TODO: extend by having stretch dock and undock
+
+    print('=== Aligning with Machine ===')
+    result = subprocess.run(
+        [sys.executable, 'base_alignment.py'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'base alignment done? {result.returncode}')
+
+    move(0.12)
 
     print('=== Opening the Machine ===')
     result = subprocess.run(
@@ -234,10 +285,26 @@ def main():
         cwd=sys.path[0] or '.',
     )
     if result.returncode != 0:
-        print(f'Dial twisting demo exited with code {result.returncode}')
+        print(f'Dial twisting demo exited with code {result.returncode}')\
+        
+    move(-0.25)
+
+    print('=== Aligning with Machine ===')
+    result = subprocess.run(
+        [sys.executable, 'base_alignment.py'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'base alignment done? {result.returncode}')
+
+    print('=== Moving to Push Button ===')
+    move(-0.02)
+
+    print('=== Pausing for 1 second ===')
+    time.sleep(1.0)
 
     result = subprocess.run(
-        [sys.executable, 'button_pressing_demo.py', '-e', exposure],
+        [sys.executable, 'button_and_adjust.py', '-e', exposure],
         cwd=sys.path[0] or '.',
     )
     if result.returncode != 0:
@@ -293,22 +360,42 @@ def main():
     rotate(QUARTER_CLOCK)
     move(FROM_MACHINE_TO_WTABLE)
 
-    print('=== Closing Machine ===')
+    print('=== Aligning with Machine ===')
+    result = subprocess.run(
+        [sys.executable, 'base_alignment.py'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'base alignment done? {result.returncode}')
+
+    move(0.12)
+
+    print('=== Closing the Machine ===')
     result = subprocess.run(
         [sys.executable, 'twist_and_adjust.py', '-e', exposure, '--mop', 'close'],
         cwd=sys.path[0] or '.',
     )
     if result.returncode != 0:
-        print(f'Dial twisting demo exited with code {result.returncode}')
+        print(f'Dial twisting demo exited with code {result.returncode}')\
+        
+    move(-0.25)
+
+    print('=== Aligning with Machine ===')
+    result = subprocess.run(
+        [sys.executable, 'base_alignment.py'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'base alignment done? {result.returncode}')
 
     print('=== Moving to Push Button ===')
-    move(-0.095)
+    move(-0.02)
 
     print('=== Pausing for 1 second ===')
     time.sleep(1.0)
 
     result = subprocess.run(
-        [sys.executable, 'button_pressing_demo.py', '-e', exposure],
+        [sys.executable, 'button_and_adjust.py', '-e', exposure],
         cwd=sys.path[0] or '.',
     )
     if result.returncode != 0:
