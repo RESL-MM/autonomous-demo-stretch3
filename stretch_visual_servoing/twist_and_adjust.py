@@ -299,14 +299,30 @@ def main(exposure, mop):
                         tag_5_pos = m['pos']
                         tag_5_frame = m['z_axis']                                         
                                                                                             
-                # Calculate midpoint if both markers detected (tag 6 on left, tag 5 on right)                               
+                # Calculate midpoint if both markers detected (tag 6 on left, tag 5 on right)
+                # TODO: test and adjust hardcoded offset values                               
                 if tag_6_pos is not None and tag_5_pos is not None:    
                     if mop == 1:
                         toy_target = 0.67 * tag_6_pos + 0.33 * tag_5_pos
                     else:
-                        toy_target = 0.64 * tag_5_pos + 0.36 * tag_6_pos
+                        toy_target = 0.36 * tag_6_pos + 0.64 * tag_5_pos
                     t_frame = (tag_6_frame + tag_5_frame) / 2.0
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
+                elif tag_6_pos is not None:
+                    if mop == 1:
+                        toy_target = tag_6_pos + np.array([0.05, 0, 0])
+                    else:
+                        toy_target = tag_6_pos + np.array([0.1, 0, 0])
+                    t_frame = tag_6_frame
+                    toy_target_frame = t_frame / np.linalg.norm(t_frame)
+                elif tag_5_pos is not None:
+                    if mop == 1:
+                        toy_target = tag_5_pos - np.array([0.1, 0, 0])
+                    else:
+                        toy_target = tag_5_pos - np.array([0.05, 0, 0])
+                    t_frame = tag_5_frame
+                    toy_target_frame = t_frame / np.linalg.norm(t_frame)
+
 
             print()
 
@@ -495,8 +511,6 @@ def main(exposure, mop):
                             if not (abs(x_fixed) > alignment_tolerance):
                                 cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                                 cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
-
-                            
 
                             controller.set_command(cmd)
 
