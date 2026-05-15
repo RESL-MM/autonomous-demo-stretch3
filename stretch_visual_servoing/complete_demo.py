@@ -130,99 +130,99 @@ def main():
             f'{dh.exposure_keywords}, or is outside of the allowed numeric range, {dh.exposure_range}.'
         )
 
-    # print('=== Aligning with Machine ===')
-    # result = subprocess.run(
-    #     [sys.executable, 'base_alignment.py'],
-    #     cwd=sys.path[0] or '.',
-    # )
-    # if result.returncode != 0:
-    #     print(f'base alignment done? {result.returncode}')
+    print('=== Aligning with Machine ===')
+    result = subprocess.run(
+        [sys.executable, 'base_alignment.py'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'base alignment done? {result.returncode}')
 
-    # move(0.12)
+    move(0.12)
 
-    # print('=== Opening the Machine ===')
-    # result = subprocess.run(
-    #     [sys.executable, 'twist_and_adjust.py', '-e', exposure, '--mop', 'open'],
-    #     cwd=sys.path[0] or '.',
-    # )
-    # if result.returncode != 0:
-    #     print(f'Dial twisting demo exited with code {result.returncode}')\
+    print('=== Opening the Machine ===')
+    result = subprocess.run(
+        [sys.executable, 'twist_and_adjust.py', '-e', exposure, '--mop', 'open'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'Dial twisting demo exited with code {result.returncode}')\
         
-    # move(-0.25)
+    move(-0.25)
 
-    # print('=== Aligning with Machine ===')
-    # result = subprocess.run(
-    #     [sys.executable, 'base_alignment.py'],
-    #     cwd=sys.path[0] or '.',
-    # )
-    # if result.returncode != 0:
-    #     print(f'base alignment done? {result.returncode}')
+    print('=== Aligning with Machine ===')
+    result = subprocess.run(
+        [sys.executable, 'base_alignment.py'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'base alignment done? {result.returncode}')
 
-    # print('=== Moving to Push Button ===')
-    # move(-0.02)
+    print('=== Moving to Push Button ===')
+    move(-0.02)
 
-    # print('=== Pausing for 1 second ===')
-    # time.sleep(1.0)
+    print('=== Pausing for 1 second ===')
+    time.sleep(1.0)
 
-    # result = subprocess.run(
-    #     [sys.executable, 'button_and_adjust.py', '-e', exposure],
-    #     cwd=sys.path[0] or '.',
-    # )
-    # if result.returncode != 0:
-    #     print(f'Button pressing demo exited with code {result.returncode}')
+    result = subprocess.run(
+        [sys.executable, 'button_and_adjust.py', '-e', exposure],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'Button pressing demo exited with code {result.returncode}')
 
-    # print('=== Going to Pick Up Wafer ===')
-    # move(-FROM_MACHINE_TO_WTABLE)
-    # rotate(QUARTER_CLOCK)
+    print('=== Going to Pick Up Wafer ===')
+    move(-FROM_MACHINE_TO_WTABLE)
+    rotate(QUARTER_CLOCK)
 
-    # print('=== Pausing for 1 sec ===')
-    # time.sleep(1.0)
+    print('=== Pausing for 1 sec ===')
+    time.sleep(1.0)
 
-    # print('=== Aligning with Wafer Station ==')
-    # result = subprocess.run(
-    #     [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'wafer_station'],
-    #     cwd=sys.path[0] or '.',
-    # )
-    # if result.returncode != 0:
-    #     print(f'Wafer station alignment exited with code {result.returncode}')
+    print('=== Aligning with Wafer Station ==')
+    result = subprocess.run(
+        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'wafer_station'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'Wafer station alignment exited with code {result.returncode}')
 
-    # rotate(QUARTER_COUNTERCLOCK)
+    rotate(QUARTER_COUNTERCLOCK)
 
-    # result = subprocess.run(
-    #     [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'wafer_station', '--horizontal'],
-    #     cwd=sys.path[0] or '.',
-    # )
-    # if result.returncode != 0:
-    #     print(f'Wafer station alignment exited with code {result.returncode}')
+    result = subprocess.run(
+        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'wafer_station', '--horizontal'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'Wafer station alignment exited with code {result.returncode}')
 
-    # print('=== Picking Up Wafer ===')
-    # do_dw_pupd(False, False)
+    print('=== Picking Up Wafer ===')
+    do_dw_pupd(False, False)
 
-    # print('=== Moving to Tray ===')
-    # result = subprocess.run(
-    #     [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'tray'],
-    #     cwd=sys.path[0] or '.',
-    # )
-    # if result.returncode != 0:
-    #     print(f'Wafer station alignment exited with code {result.returncode}')
+    print('=== Moving to Tray ===')
+    result = subprocess.run(
+        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'tray'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'Wafer station alignment exited with code {result.returncode}')
 
-    # rotate(QUARTER_COUNTERCLOCK)
+    rotate(QUARTER_COUNTERCLOCK)
 
-    # print('=== Aligning with Tray ===')
-    # result = subprocess.run(
-    #     [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'tray', '--horizontal'],
-    #     cwd=sys.path[0] or '.',
-    # )
-    # if result.returncode != 0:
-    #     print(f'Wafer station alignment exited with code {result.returncode}')
+    print('=== Aligning with Tray ===')
+    result = subprocess.run(
+        [sys.executable, 'station_navigation.py', '-e', exposure, '--tag_name', 'tray', '--horizontal'],
+        cwd=sys.path[0] or '.',
+    )
+    if result.returncode != 0:
+        print(f'Wafer station alignment exited with code {result.returncode}')
 
-    # print('=== Depositing Wafer ===')
-    # do_dw_pupd(True, True)
+    print('=== Depositing Wafer ===')
+    do_dw_pupd(True, True)
 
-    # print('=== Moving to Machine ===')
-    # move(0.9)
-    # rotate(QUARTER_CLOCK)
-    # move(FROM_TRAY_TO_MACHINE)
+    print('=== Moving to Machine ===')
+    move(0.9)
+    rotate(QUARTER_CLOCK)
+    move(FROM_TRAY_TO_MACHINE)
 
     print('=== Aligning with Machine ===')
     result = subprocess.run(

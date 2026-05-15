@@ -1,0 +1,63 @@
+# Be careful with length_mm values. Stickers and printouts can vary
+# significantly from your expectations. You should measure them
+# directly. For example, in a prototype robot the stickers were closer
+# to 23mm wide than 24mm. This 1mm difference resulted in > 1cm of
+# error in the depths for the marker pose estimates when only using
+# RGB images.
+
+
+'200':
+  length_mm: 14
+  use_rgb_only: True
+  name: 'finger_left'
+  link: 'link_finger_left'
+'201':
+  length_mm: 14
+  use_rgb_only: True
+  name: 'finger_right'
+  link: 'link_finger_right'
+'9':
+  length_mm: 100 #65 # 43
+  use_rgb_only: True
+  name: 'tray'
+  link: 'None'
+'7':
+  length_mm: 100 #65 # 43
+  use_rgb_only: True
+  name: 'wafer_station'
+  link: 'None'
+'6':
+  length_mm: 25
+  use_rgb_only: True
+  name: 'left_dial'
+  link: 'None'
+'5':
+  length_mm: 25
+  use_rgb_only: True
+  name: 'middle_dialbutton'
+  link: 'None'
+'4':
+  length_mm: 25
+  use_rgb_only: True
+  name: 'button_right'
+  link: 'None'
+'14':
+  length_mm: 37
+  use_rgb_only: True
+  name: 'right_button'
+  link: 'None'
+'24':
+  length_mm: 19
+  use_rgb_only: True
+  name: 'middle_dialbutton'
+  link: 'None'
+'23':
+  length_mm: 19
+  use_rgb_only: True
+  name: 'left_dial'
+  link: 'None'
+'default':
+  length_mm: 24
+  use_rgb_only: False
+  name: 'unknown'
+  link: 'None'
