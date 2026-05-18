@@ -345,11 +345,11 @@ def run(robot, tag_name, exposure='low', horizontal_align=True):
                 print(position_error)
                 print(rotation_error)
 
-                k_face = 5.0
-                k_base = 2.0
-                max_rotation = np.pi/6
-                rotation_tolerance = 0.1 # radians
-                alignment_tolerance = 0.025 # meters
+                k_face = 1.5
+                k_base = 5.0
+                max_rotation = np.pi/12
+                rotation_tolerance = 0.01 # radians
+                alignment_tolerance = 0.01 # meters
                 station_tolerance = 0.9
 
                 base_rotational_vel = np.clip(k_face * rotation_error, -max_rotation, max_rotation)
@@ -359,6 +359,8 @@ def run(robot, tag_name, exposure='low', horizontal_align=True):
                 reached = True
 
                 cmd = zero_vel.copy()
+
+                #TODO: make error correction more robust (large distance and angle correction case)
 
                 if (abs(rotation_error) > rotation_tolerance):
                     cmd['base_counterclockwise'] = base_rotational_vel

@@ -528,7 +528,7 @@ def run(robot, exposure='low'):
 
                 elif lock_phase == 'press':
                     cmd = {
-                        'arm_out': 0.08,
+                        'arm_out': 0.02,
                     }
                     cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
                     cmd = {k: joint_visual_servoing_velocity_scale.get(k, 1.0) * v for (k,v) in cmd.items()}
