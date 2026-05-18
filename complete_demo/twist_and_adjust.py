@@ -33,6 +33,8 @@ def get_dxl_joint_limits(joint):
     
 ####################################
 # Miscellaneous Parameters
+MOP_OPEN = -1
+MOP_CLOSE = 1
 
 motion_on = True
 print_timing = True
@@ -185,10 +187,10 @@ def recenter_robot(robot):
 def run(robot, exposure='low', op='close'):
     controller = None
     pipeline = None
-    mop = 1
+    mop = MOP_CLOSE
 
     if op is not 'close':
-        mop = -1
+        mop = MOP_OPEN
 
     try:
         recenter_robot(robot)
@@ -283,10 +285,10 @@ def run(robot, exposure='low', op='close'):
                 # TODO: test and adjust hardcoded offset values      
                 # # tag 6 is 3.5cm to the left of dial center, tag 5 is 4.5cm to right of dial center                         
                 if tag_6_pos is not None and tag_5_pos is not None:    
-                    if mop == 1:
+                    if mop == MOP_CLOSE:
                         toy_target = 0.67 * tag_6_pos + 0.33 * tag_5_pos
                     else:
-                        toy_target = 0.38 * tag_6_pos + 0.62 * tag_5_pos
+                        toy_target = 0.37 * tag_6_pos + 0.63 * tag_5_pos
                     t_frame = (tag_6_frame + tag_5_frame) / 2.0
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
                 elif tag_6_pos is not None:

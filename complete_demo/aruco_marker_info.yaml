@@ -16,6 +16,11 @@
   use_rgb_only: True
   name: 'finger_right'
   link: 'link_finger_right'
+'245':
+  length_mm: 88.0
+  use_rgb_only: False
+  name: 'docking_station'
+  link: None
 '9':
   length_mm: 100 #65 # 43
   use_rgb_only: True
