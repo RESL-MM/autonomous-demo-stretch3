@@ -54,7 +54,7 @@ min_base_speed = 0.05
 target_width_m = 0.0542
 
 # Distance threshold to trigger button press (lock behavior)
-grasp_if_error_below_this = 0.05
+grasp_if_error_below_this = 0.07
 
 # Gripper speed when opening at start
 gripper_open_speed = 1.0
@@ -89,7 +89,7 @@ joint_visual_servoing_velocity_scale = {
 ## Initial Pose
 
 joint_state_center = {
-    'lift_pos' : 0.7,
+    'lift_pos' : 0.71,
     'arm_pos': 0.01,
     'wrist_yaw_pos': 0.0,
     'wrist_pitch_pos': -0.72, # 0.0, #-0.6
@@ -152,8 +152,8 @@ vel_cmd_to_pos = { v:k for (k,v) in pos_to_vel_cmd.items() }
 ####################################
 
 def recenter_robot(robot):
-    pan = np.pi/2.0
-    tilt = -np.pi/2.0
+    pan = 0.0
+    tilt = 0.0
     robot.head.move_to('head_pan', pan)
     robot.head.move_to('head_tilt', tilt)
     robot.push_command()
@@ -279,13 +279,13 @@ def run(robot, exposure='low'):
                 if button_left_pos is not None and button_right_pos is not None:   
                     t_frame = (button_left_frame + button_right_frame) / 2.0
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
-                    toy_target = (button_left_pos + button_right_pos) / 2.0 
+                    toy_target = ((button_left_pos + button_right_pos) / 2.0) + np.array([0.005, 0.0, 0.0])
                 elif button_left_pos is not None:
-                    toy_target = button_left_pos + np.array([0.06, 0, 0])
+                    toy_target = button_left_pos + np.array([0.055, 0, 0])
                     t_frame = button_left_frame
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
                 elif button_right_pos is not None:
-                    toy_target = button_right_pos - np.array([0.06, 0, 0])
+                    toy_target = button_right_pos - np.array([0.055, 0, 0])
                     t_frame = button_right_frame
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
 
@@ -515,7 +515,7 @@ def run(robot, exposure='low'):
                 prev_behavior = behavior
 
                 wait_duration = 8       # 0.5 seconds at 15Hz
-                press_duration = 12     # ~0.8 seconds of arm extension at 15Hz
+                press_duration = 60     # ~0.8 * 5 seconds of arm extension at 15Hz
                 hold_duration = 150     # 10 seconds at 15Hz
 
                 if lock_phase == 'wait_before_press':
@@ -528,7 +528,7 @@ def run(robot, exposure='low'):
 
                 elif lock_phase == 'press':
                     cmd = {
-                        'arm_out': 0.02,
+                        'arm_out': 0.05,
                     }
                     cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
                     cmd = {k: joint_visual_servoing_velocity_scale.get(k, 1.0) * v for (k,v) in cmd.items()}
@@ -580,7 +580,7 @@ def run(robot, exposure='low'):
                     total_elapsed += wait_duration + press_duration
                 elif lock_phase == 'retract':
                     total_elapsed += wait_duration + press_duration + hold_duration
-                if total_elapsed > 200:
+                if total_elapsed > 500:
                     cmd = zero_vel.copy()
                     controller.set_command(cmd)
                     print('LOCK: Timeout! Exiting program...')

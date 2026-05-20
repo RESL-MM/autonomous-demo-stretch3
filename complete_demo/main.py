@@ -95,32 +95,14 @@ def do_dw_pupd(robot, dw=True, put_down=False):
 
     robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
 
-def debug_test(robot, debugging=False):
-    if not debugging:
-        return
-    
-    print('=== Aligning with Wafer Station ==')
-    station_navigation.run(robot, 'wafer_station', horizontal_align=False)
+def debug_test(robot):    
+    print('=== Aligning with Machine ===')
+    base_alignment.run(robot)
 
-    rotate(robot, QUARTER_COUNTERCLOCK)
+    print('=== Moving to Push Button ===')
+    move(robot, -0.02)
 
-    station_navigation.run(robot, 'wafer_station', horizontal_align=True)
-
-    print('=== Picking Up Wafer ===')
-    do_dw_pupd(robot, False, True)
-
-    # DMZ
-
-    print('=== Moving to Tray ===')
-    station_navigation.run(robot, 'tray', horizontal_align=False)
-
-    rotate(robot, QUARTER_COUNTERCLOCK)
-
-    print('=== Aligning with Tray ===')
-    station_navigation.run(robot, 'tray', horizontal_align=True)
-
-    print('=== Depositing Wafer ===')
-    do_dw_pupd(robot, True, True)
+    button_and_adjust.run(robot)
 
     return
 
@@ -130,7 +112,11 @@ def main():
         robot = rb.Robot()
         robot.startup()
         
-        debug_test(robot, False)
+        DEBUG = True
+
+        if DEBUG:
+            debug_test(robot)
+            return
 
         print('=== Aligning with Machine ===')
         base_alignment.run(robot)

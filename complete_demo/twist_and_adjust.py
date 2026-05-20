@@ -155,8 +155,8 @@ vel_cmd_to_pos = { v:k for (k,v) in pos_to_vel_cmd.items() }
 ####################################
 
 def recenter_robot(robot):
-    pan = np.pi/2.0
-    tilt = -np.pi/2.0
+    pan = 0.0
+    tilt = 0.0
     robot.head.move_to('head_pan', pan)
     robot.head.move_to('head_tilt', tilt)
     robot.push_command()
@@ -189,7 +189,7 @@ def run(robot, exposure='low', op='close'):
     pipeline = None
     mop = MOP_CLOSE
 
-    if op is not 'close':
+    if op != 'close':
         mop = MOP_OPEN
 
     try:
@@ -300,8 +300,6 @@ def run(robot, exposure='low', op='close'):
                     t_frame = tag_5_frame
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
 
-
-            print()
 
             target_name = 'Dial Target (Tags 6 & 5)'
             if toy_target is None:
@@ -433,7 +431,7 @@ def run(robot, exposure='low', op='close'):
                     k_base = 5.0
                     max_rotation = 0.25
                     rotation_tolerance = 0.001 # radians
-                    alignment_tolerance = 0.005 # meters
+                    alignment_tolerance = 0.002 # meters
 
                     base_rotational_vel = np.clip(-k_face * rotation_error, -max_rotation, max_rotation)
                     base_movement = np.clip(-k_base * x_error, -2.0, 2.0)
@@ -477,15 +475,15 @@ def run(robot, exposure='low', op='close'):
                             print(rotation_error)
                             print(x_error)
                             print(x_fixed)        
-                            if (abs(rotation_error) > rotation_tolerance):
-                                cmd['base_counterclockwise'] = -base_rotational_vel
-                                print('Aligning with Station')
+                            # if (abs(rotation_error) > rotation_tolerance):
+                            #     cmd['base_counterclockwise'] = -base_rotational_vel
+                            #     print('Aligning with Station')
                             if (abs(x_fixed) > alignment_tolerance):
                                 cmd['base_forward'] = base_movement
                                 print('Horizontally Aligning with Station')
 
-                            if not ((abs(rotation_error) > rotation_tolerance) or (abs(x_fixed) > alignment_tolerance)):
-                            #if not (abs(x_fixed) > alignment_tolerance):
+                            #if not ((abs(rotation_error) > rotation_tolerance) or (abs(x_fixed) > alignment_tolerance)):
+                            if not (abs(x_fixed) > alignment_tolerance):
                                 cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                                 cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
 
@@ -545,7 +543,7 @@ def run(robot, exposure='low', op='close'):
                 pitch_hold_vel = lock_target_pitch - joint_state['wrist_pitch_pos']
                 
                 if lock_phase == 'rotating_ccw':
-                    target_roll = -0.785 * mop  # -45 degrees
+                    target_roll = -0.8 * mop  # -45 degrees
                     roll_error = target_roll - joint_state['wrist_roll_pos']
                     
                     if abs(roll_error) < 0.05:
