@@ -37,7 +37,7 @@ def default_gripper(robot):
 def move(robot, distance: float):
     robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
     robot.end_of_arm.move_to('wrist_pitch', 0.0)
-    robot.base.translate_by(distance, v_m=0.5)
+    robot.base.translate_by(distance, v_m=0.75)
     robot.push_command()
     print(f"waited for move by {distance}m command? {robot.wait_command(timeout=60.0)}")
 
@@ -73,7 +73,7 @@ def do_dw_pupd(robot, dw=True, put_down=False):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_by(-PUPD_DIST, v_m=0.02)
+    robot.lift.move_by(-PUPD_DIST, v_m=0.03)
     robot.push_command()
     robot.wait_command()
 
@@ -85,7 +85,7 @@ def do_dw_pupd(robot, dw=True, put_down=False):
     robot.push_command()
     robot.wait_command()
 
-    robot.end_of_arm.move_to('stretch_gripper', 0) # [-100, 100] => [fully closed, fully open]
+    robot.end_of_arm.move_to('stretch_gripper', 25) # [-100, 100] => [fully closed, fully open]
     robot.push_command()
     robot.wait_command()
 
@@ -96,15 +96,68 @@ def do_dw_pupd(robot, dw=True, put_down=False):
     robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
 
 def debug_test(robot):    
-    print('=== Aligning with Machine ===')
-    base_alignment.run(robot)
-
-    print('=== Moving to Push Button ===')
-    move(robot, -0.02)
-
-    button_and_adjust.run(robot)
-
+    # machine_op_debug(robot)
+    go_to_tray_debug(robot)
     return
+
+def go_to_tray_debug(robot):
+    print('=== Moving to Tray ===')
+    station_navigation.run(robot, 'tray', horizontal_align=False)
+
+    rotate(robot, QUARTER_COUNTERCLOCK)
+
+    print('=== Aligning with Tray ===')
+    station_navigation.run(robot, 'tray', horizontal_align=True)
+
+    print('=== Depositing Wafer ===')
+    do_dw_pupd(robot, True, True)
+                        
+
+def machine_op_debug(robot):
+    for i in range (0,5):
+        print('=== Aligning with Machine ===')
+        base_alignment.run(robot)
+
+        move(robot, 0.12)
+
+        print('=== Opening the Machine ===')
+        twist_and_adjust.run(robot, op='open')
+            
+        move(robot, -0.2)
+
+        print('=== Aligning with Machine ===')
+        base_alignment.run(robot)
+
+        print('=== Moving to Push Button ===')
+        move(robot, -0.02)
+
+        print('=== Pausing for 1 second ===')
+        time.sleep(1.0)
+
+        button_and_adjust.run(robot)
+
+        print('=== Aligning with Machine ===')
+        base_alignment.run(robot)
+
+        move(robot, 0.12)
+
+        print('=== Closing the Machine ===')
+        twist_and_adjust.run(robot, op='close')
+            
+        move(robot, -0.25)
+
+        print('=== Aligning with Machine ===')
+        base_alignment.run(robot)
+
+        print('=== Moving to Push Button ===')
+        move(robot, -0.02)
+
+        print('=== Pausing for 1 second ===')
+        time.sleep(1.0)
+
+        button_and_adjust.run(robot)
+
+
 
 
 def main():
@@ -112,7 +165,7 @@ def main():
         robot = rb.Robot()
         robot.startup()
         
-        DEBUG = True
+        DEBUG = False 
 
         if DEBUG:
             debug_test(robot)

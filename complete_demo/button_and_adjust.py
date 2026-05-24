@@ -89,10 +89,10 @@ joint_visual_servoing_velocity_scale = {
 ## Initial Pose
 
 joint_state_center = {
-    'lift_pos' : 0.71,
+    'lift_pos' : 1.0625,
     'arm_pos': 0.01,
     'wrist_yaw_pos': 0.0,
-    'wrist_pitch_pos': -0.72, # 0.0, #-0.6
+    'wrist_pitch_pos': -np.pi/6, # -0.523 ~ pi/6, # 0.0, #-0.6
     'wrist_roll_pos': 0.0,
     'gripper_pos': 0
 }
@@ -172,7 +172,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_to(1.1)
+    robot.lift.move_to(joint_state_center['lift_pos'])
     robot.push_command()
     robot.wait_command()
 
@@ -279,13 +279,13 @@ def run(robot, exposure='low'):
                 if button_left_pos is not None and button_right_pos is not None:   
                     t_frame = (button_left_frame + button_right_frame) / 2.0
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
-                    toy_target = ((button_left_pos + button_right_pos) / 2.0) + np.array([0.005, 0.0, 0.0])
+                    toy_target = ((button_left_pos + button_right_pos) / 2.0) + np.array([0.004, 0.0, 0.0])
                 elif button_left_pos is not None:
-                    toy_target = button_left_pos + np.array([0.055, 0, 0])
+                    toy_target = button_left_pos + np.array([0.054, 0, 0])
                     t_frame = button_left_frame
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
                 elif button_right_pos is not None:
-                    toy_target = button_right_pos - np.array([0.055, 0, 0])
+                    toy_target = button_right_pos - np.array([0.054, 0, 0])
                     t_frame = button_right_frame
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
 
@@ -456,6 +456,7 @@ def run(robot, exposure='low'):
                         controller.set_command(cmd)
                         print('Target reached - transitioning to LOCK behavior')
                         behavior = 'lock'
+
                     else:
                         cmd['gripper_open'] = 0.0
 
@@ -466,9 +467,9 @@ def run(robot, exposure='low'):
                             print(rotation_error)
                             print(x_error)
                             print(x_fixed)        
-                            if (abs(rotation_error) > rotation_tolerance):
-                                cmd['base_counterclockwise'] = -base_rotational_vel
-                                print('Aligning with Station')
+                            # if (abs(rotation_error) > rotation_tolerance):
+                            #     cmd['base_counterclockwise'] = -base_rotational_vel
+                            #     print('Aligning with Station')
 
                             if (abs(x_fixed) > alignment_tolerance):
                                 cmd['base_forward'] = base_movement
@@ -490,6 +491,7 @@ def run(robot, exposure='low'):
                         frames_since_target_detected >= stop_if_target_not_detected_this_many_frames):
                         print('Target lost but was close enough - transitioning to LOCK behavior')
                         behavior = 'lock'
+
                         cmd = zero_vel.copy()
                     elif frames_since_target_detected >= stop_if_target_not_detected_this_many_frames:
                         cmd = stop_joints

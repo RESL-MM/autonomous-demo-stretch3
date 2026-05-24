@@ -97,7 +97,7 @@ joint_state_center = {
     'wrist_yaw_pos': 0.0,
     'wrist_pitch_pos': -0.4, #-0.6
     'wrist_roll_pos': 0.0,
-    'gripper_pos': 0
+    'gripper_pos': 25
 }
 
 ####################################
@@ -180,9 +180,9 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
 
-    # robot.end_of_arm.get_joint('stretch_gripper').move_to(joint_state_center['gripper_pos'])
-    # robot.push_command()
-    # robot.wait_command()
+    robot.end_of_arm.get_joint('stretch_gripper').move_to(joint_state_center['gripper_pos'])
+    robot.push_command()
+    robot.wait_command()
 
 def run(robot, exposure='low', op='close'):
     controller = None
@@ -292,11 +292,21 @@ def run(robot, exposure='low', op='close'):
                     t_frame = (tag_6_frame + tag_5_frame) / 2.0
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
                 elif tag_6_pos is not None:
-                    toy_target = tag_6_pos + np.array([0.035, 0, 0])
+                    default_offset = np.array([0.035, 0, 0])
+                    if mop == MOP_CLOSE:
+                        default_offset[0] + 0.05
+                    else:
+                        default_offset[0] - 0.05
+                    toy_target = tag_6_pos + default_offset
                     t_frame = tag_6_frame
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
                 elif tag_5_pos is not None:
-                    toy_target = tag_5_pos - np.array([0.045, 0, 0])
+                    default_offset = np.array([0.045, 0, 0])
+                    if mop == MOP_CLOSE:
+                        default_offset[0] - 0.05
+                    else:
+                        default_offset[0] + 0.05
+                    toy_target = tag_5_pos - default_offset 
                     t_frame = tag_5_frame
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
 
@@ -602,6 +612,9 @@ def run(robot, exposure='low', op='close'):
                         lock_hold_count += 1
                     else:
                         lock_phase = 'rotating_cw'
+                        robot.end_of_arm.move_to('stretch_gripper', 50)
+                        robot.push_command()
+                        robot.wait_command()
                         lock_state_count = 0
                         print('LOCK: Hold complete! Rotating wrist clockwise to +45 degrees...')
                 
