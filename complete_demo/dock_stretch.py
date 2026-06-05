@@ -6,6 +6,7 @@ import normalized_velocity_control as nvc
 import stretch_body.robot as rb
 import aruco_detector as ad
 import yaml
+import s3_tf_helper as tfh
 from yaml.loader import SafeLoader
 from scipy.spatial.transform import Rotation
 from hello_helpers import hello_misc as hm
@@ -182,7 +183,7 @@ def recenter_robot(robot):
     # robot.wait_command()
         
 
-def run(robot, exposure='low', horizontal_align=True):
+def run(robot, exposure='low'):
     controller = None
     pipeline = None
 
@@ -190,11 +191,8 @@ def run(robot, exposure='low', horizontal_align=True):
         recenter_robot(robot)
         controller = nvc.NormalizedVelocityControl(robot)
         controller.reset_base_odometry()
-        
-        if horizontal_align:
-            robot.head.move_to('head_pan', -np.pi/2)
-        else:
-            robot.head.move_to('head_pan', 0.0)
+
+        robot.head.move_to('head_pan', 0.0)
         robot.head.move_to('head_tilt', 0.0)
 
         marker_info = {}
@@ -204,6 +202,14 @@ def run(robot, exposure='low', horizontal_align=True):
         detect_aruco_button_on = True
         aruco_detector = ad.ArucoDetector(marker_info=marker_info, show_debug_images=True, use_apriltag_refinement=False, brighten_images=True)
         # aruco_to_fingertips = af.ArucoToFingertips(default_height_above_mounting_surface=af.suctioncup_height['cup_bottom'])
+
+        head_nav_info = tfh.CameraInfo
+        head_nav_info.cam_name = 'head_nav'
+        # TODO: update offset and later add better way of updating (e.g. via yaml)
+        head_nav_info.fixed_pos_offset = np.array([0.0, 0.0, 0.0])
+        
+        transform_helper = tfh.TransformHelper(robot)
+        transform_helper.add_camera(head_nav_info)
 
         first_frame = True
 
@@ -268,20 +274,19 @@ def run(robot, exposure='low', horizontal_align=True):
                 aruco_detector.update(color_image, camera_info)                             
                 markers = aruco_detector.get_detected_marker_dict()                         
                 # fingertips = aruco_to_fingertips.get_fingertips(markers)                    
-                                                                                            
-                wafer_station_pos = None   
-                wafer_station_norm = None                                       
+                                                                                                                               
                 for k in markers:                                                           
                     m = markers[k]                                                          
                     name = m['info']['name']
 
                     if name == 'docking_station':
-                        wafer_station_pos = m['pos']  
-                        wafer_station_norm = m['z_axis']     
+                        wafer_station = m['pos']  
+                        wafer_station_normal = m['z_axis']     
 
-                if wafer_station_pos is not None:
-                    wafer_station = np.array([wafer_station_pos[1]-0.02, -wafer_station_pos[0], wafer_station_pos[2]])
-                    wafer_station_normal = np.array([wafer_station_norm[1], -wafer_station_norm[0], wafer_station_norm[2]])
+                if wafer_station is not None:
+                    # assigns position and accounts for the orientation of the d435i
+                    wafer_station = np.array([wafer_station[1], -wafer_station[0], wafer_station[2]])
+                    wafer_station_normal = np.array([wafer_station_normal[1], -wafer_station_normal[0], wafer_station_normal[2]])
                     wafer_station_normal = wafer_station_normal / np.linalg.norm(wafer_station_normal)                 
                                                                                          
 
@@ -303,9 +308,10 @@ def run(robot, exposure='low', horizontal_align=True):
                 frames_since_target_detected = frames_since_target_detected + 1
 
             if wafer_station is not None:         
-                position_error = wafer_station # - between_fingertips
-                if tag_name == 'tray' and horizontal_align:
-                    position_error[0] += 0.045
+                position_error = wafer_station
+
+                # TODO: check and implement the CAMERA FRAME processing-- implement transform here?
+
                 target_error = np.linalg.norm(position_error)
                 rotation_error = np.arctan2(-wafer_station_normal[0], -wafer_station_normal[2])
                 print('target_error = {:.2f} cm'.format(100.0 * target_error))
@@ -342,7 +348,7 @@ def run(robot, exposure='low', horizontal_align=True):
 
             # elif (between_fingertips is not None) and (toy_target is not None) and (target_error <= max_distance_for_attempted_reach): 
             elif wafer_station is not None:           
-                x_error, y_error, z_error = position_error
+                x_error, y_error, z_error = position_error # TODO: check-- this SHOULD be in base frame
 
                 print(position_error)
                 print(rotation_error)
@@ -369,12 +375,12 @@ def run(robot, exposure='low', horizontal_align=True):
                     print('Aligning with Station')
                     reached = False
                 
-                if (abs(x_error) > alignment_tolerance and horizontal_align):
+                if (abs(x_error) > alignment_tolerance):
                     cmd['base_forward'] = base_movement
                     print('Horizontally Aligning with Station')
                     reached = False
 
-                if (abs(z_error) > station_tolerance and not horizontal_align):
+                if (abs(z_error) > station_tolerance):
                     cmd['base_forward'] = base_station_movement
                     print('Moving to Station')
                     reached = False
@@ -408,3 +414,19 @@ def run(robot, exposure='low', horizontal_align=True):
             controller.stop()
         if pipeline is not None:
             pipeline.stop()
+
+def main():
+    robot = rb.Robot()
+
+    if not robot.startup():
+        print("Failed to start robot")
+        return
+
+    try:
+        run(robot)
+    finally:
+        robot.stop()
+
+
+if __name__ == "__main__":
+    main()
