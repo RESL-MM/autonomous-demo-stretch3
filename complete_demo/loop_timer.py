@@ -43,10 +43,10 @@ class LoopTimer:
             if recent_length > 0:
                 print('average frequency over last ' + str(recent_length) + ' iterations = {:.2f} Hz'.format(1.0/mean(self.loop_recent_timing)))
             print('-----------------------------------------------')
-        else:
-            recent_length = len(self.loop_recent_timing)
-            if recent_length > 0:
-                print('average frequency over last ' + str(recent_length) + ' iterations = {:.2f} Hz'.format(1.0/mean(self.loop_recent_timing)))
+        # else:
+        #     recent_length = len(self.loop_recent_timing)
+        #     if recent_length > 0:
+        #         print('average frequency over last ' + str(recent_length) + ' iterations = {:.2f} Hz'.format(1.0/mean(self.loop_recent_timing)))
 
         
     def end_of_iteration(self):

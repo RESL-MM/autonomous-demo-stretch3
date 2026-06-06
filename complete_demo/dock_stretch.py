@@ -18,7 +18,7 @@ def get_dxl_joint_limits(joint):
     # method to get dynamixel joint limits in radians from robot params
     # Refer https://github.com/hello-robot/stretch_body/blob/master/body/stretch_body/dynamixel_hello_XL430.py#L1196:L1199
 
-    range_t = robot_params.RobotParams().get_params()[2][joint]['range_t']
+    range_t = robot_params.RobotParams().get_params()[1][joint]['range_t']
     flip_encoder_polarity = robot_params.RobotParams().get_params()[1][joint]['flip_encoder_polarity']
     gr = robot_params.RobotParams().get_params()[1][joint]['gr']
     zero_t = robot_params.RobotParams().get_params()[1][joint]['zero_t']
@@ -192,7 +192,7 @@ def run(robot, exposure='low'):
         controller = nvc.NormalizedVelocityControl(robot)
         controller.reset_base_odometry()
 
-        robot.head.move_to('head_pan', 0.0)
+        robot.head.move_to('head_pan', -np.pi/2)
         robot.head.move_to('head_tilt', 0.0)
 
         marker_info = {}
@@ -206,7 +206,7 @@ def run(robot, exposure='low'):
         head_nav_info = tfh.CameraInfo
         head_nav_info.cam_name = 'head_nav'
         # TODO: update offset and later add better way of updating (e.g. via yaml)
-        head_nav_info.fixed_pos_offset = np.array([0.0, 0.0, 0.0])
+        head_nav_info.fixed_pos_offset = np.array([0.0, 0.08, 1.13])
         
         transform_helper = tfh.TransformHelper(robot)
         transform_helper.add_camera(head_nav_info)
@@ -230,6 +230,9 @@ def run(robot, exposure='low'):
         loop_timer = lt.LoopTimer()
 
         fingertips = {}
+
+        DEBUG_TIME = 120
+        debug_timer = 0
         
         while True:
             loop_timer.start_of_iteration()
@@ -289,13 +292,10 @@ def run(robot, exposure='low'):
                     wafer_station_normal = np.array([wafer_station_normal[1], -wafer_station_normal[0], wafer_station_normal[2]])
                     wafer_station_normal = wafer_station_normal / np.linalg.norm(wafer_station_normal)                 
                                                                                          
-
-            print(wafer_station)
-
             target_name = 'docking_station'
-            if wafer_station is None:
+            if wafer_station is None and debug_timer >= DEBUG_TIME:
                 print(target_name + ' Detection: FAILED')
-            else:
+            elif debug_timer >= DEBUG_TIME:
                 print(target_name + ' Detection: SUCCEEDED')
 
             joint_state = controller.get_joint_state()
@@ -309,15 +309,26 @@ def run(robot, exposure='low'):
 
             if wafer_station is not None:         
                 position_error = wafer_station
+                cam_roll = 0
+                cam_pitch = -joint_state['head_tilt_pos']
+                cam_yaw = -joint_state['head_pan_pos']
+                if debug_timer >= DEBUG_TIME:
+                    print(f"cam pos error: {position_error}")
+                    print(f"cam rotation: {np.array([cam_roll, cam_pitch, cam_yaw])}")
+                cam_x, cam_y, cam_z = position_error[0], position_error[1], position_error[2]
+                position_error = transform_helper.get_base_coord_from_cam_coord('head_nav',
+                                                                                cam_x, cam_y, cam_z,
+                                                                                0, 0, 0,
+                                                                                cam_roll, cam_pitch, cam_yaw)
 
                 # TODO: check and implement the CAMERA FRAME processing-- implement transform here?
 
                 target_error = np.linalg.norm(position_error)
                 rotation_error = np.arctan2(-wafer_station_normal[0], -wafer_station_normal[2])
-                print('target_error = {:.2f} cm'.format(100.0 * target_error))
+                # print('target_error = {:.2f} cm'.format(100.0 * target_error))
 
-            print('behavior =', behavior)
-            print('pre_reach =', pre_reach)
+            # print('behavior =', behavior)
+            # print('pre_reach =', pre_reach)
                         
             # if behavior == 'reach':
             prev_behavior = behavior
@@ -348,47 +359,53 @@ def run(robot, exposure='low'):
 
             # elif (between_fingertips is not None) and (toy_target is not None) and (target_error <= max_distance_for_attempted_reach): 
             elif wafer_station is not None:           
-                x_error, y_error, z_error = position_error # TODO: check-- this SHOULD be in base frame
+                x_error, y_error, z_error = position_error[0], position_error[1], position_error[2] # TODO: check-- this SHOULD be in base frame
 
-                print(position_error)
-                print(rotation_error)
+                if debug_timer >= DEBUG_TIME:
+                    print(f"pos error:     {position_error}")
+                    print(f"target error: {target_error}")
+                    print(f"rot error: {rotation_error}")
+                    print("\n\n")
+                    debug_timer = 0
+                else:
+                    debug_timer += 1
 
-                k_face = 1.5
-                k_base = 5.0
-                max_rotation = np.pi/12
-                rotation_tolerance = 0.01 # radians
-                alignment_tolerance = 0.01 # meters
-                station_tolerance = 0.9
+                # k_face = 1.5
+                # k_base = 5.0
+                # max_rotation = np.pi/12
+                # rotation_tolerance = 0.01 # radians
+                # alignment_tolerance = 0.01 # meters
+                # station_tolerance = 0.9
 
-                base_rotational_vel = np.clip(k_face * rotation_error, -max_rotation, max_rotation)
-                base_movement = np.clip(k_base * x_error, -1.0, 1.0)
-                base_station_movement = np.clip(k_base * z_error, -1.0, 1.0)
+                # base_rotational_vel = np.clip(k_face * rotation_error, -max_rotation, max_rotation)
+                # base_movement = np.clip(k_base * x_error, -1.0, 1.0)
+                # base_station_movement = np.clip(k_base * z_error, -1.0, 1.0)
 
-                reached = True
+                # reached = True
 
-                cmd = zero_vel.copy()
+                # cmd = zero_vel.copy()
 
-                #TODO: make error correction more robust (large distance and angle correction case)
+                # #TODO: make error correction more robust (large distance and angle correction case)
 
-                if (abs(rotation_error) > rotation_tolerance):
-                    cmd['base_counterclockwise'] = base_rotational_vel
-                    print('Aligning with Station')
-                    reached = False
+                # if (abs(rotation_error) > rotation_tolerance):
+                #     cmd['base_counterclockwise'] = base_rotational_vel
+                #     print('Aligning with Station')
+                #     reached = False
                 
-                if (abs(x_error) > alignment_tolerance):
-                    cmd['base_forward'] = base_movement
-                    print('Horizontally Aligning with Station')
-                    reached = False
+                # if (abs(x_error) > alignment_tolerance):
+                #     cmd['base_forward'] = base_movement
+                #     print('Horizontally Aligning with Station')
+                #     reached = False
 
-                if (abs(z_error) > station_tolerance):
-                    cmd['base_forward'] = base_station_movement
-                    print('Moving to Station')
-                    reached = False
+                # if (abs(z_error) > station_tolerance):
+                #     cmd['base_forward'] = base_station_movement
+                #     print('Moving to Station')
+                #     reached = False
 
-                if reached:
-                    break
+                # if reached:
+                #     break
 
-                controller.set_command(cmd)
+                # controller.set_command(cmd)
 
             else:
                 joint_state = controller.get_joint_state()
