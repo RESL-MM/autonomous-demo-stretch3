@@ -366,9 +366,6 @@ def run(robot, exposure='low'):
                     print(f"target error: {target_error}")
                     print(f"rot error: {rotation_error}")
                     print("\n\n")
-                    debug_timer = 0
-                else:
-                    debug_timer += 1
 
                 # k_face = 1.5
                 # k_base = 5.0
@@ -424,8 +421,15 @@ def run(robot, exposure='low'):
                     controller.set_command(cmd)
 
             loop_timer.end_of_iteration()
-            if print_timing: 
+            if print_timing and debug_timer >= DEBUG_TIME: 
                 loop_timer.pretty_print(minimum=True)
+                print("\n\n")
+
+            if debug_timer >= DEBUG_TIME:
+                debug_timer = 0
+            else:
+                debug_timer += 1
+                
     finally:
         if controller is not None:
             controller.stop()
