@@ -366,7 +366,6 @@ def run(robot, exposure='low', op='close'):
 
             if (between_fingertips is not None) and (toy_target is not None):            
                 position_error = toy_target - between_fingertips
-                face_error = np.arctan2(toy_target_frame[0], toy_target_frame[2])
                 target_error = np.linalg.norm(position_error)
                 last_target_error = target_error  # Track for lock behavior
                 print('target_error = {:.2f} cm'.format(100.0 * target_error))
@@ -404,16 +403,7 @@ def run(robot, exposure='low', op='close'):
                 elif (between_fingertips is not None) and (toy_target is not None) and (target_error <= max_distance_for_attempted_reach):            
 
                     x_error, y_error, z_error = position_error
-                    rotation_error = face_error
                     roll = joint_state['wrist_roll_pos']
-                    c = np.cos(roll)
-                    s = np.sin(roll)
-                    print(f"old rotation: {rotation_error}")
-
-                    normal = toy_target_frame
-                    normal_fixed = np.array([c * normal[0] + s * normal[1], -s * normal[0] + c * normal[1], normal[2]])
-                    x_fixed = c * x_error + s * y_error
-                    rotation_error = -np.arctan2(-normal_fixed[0],-normal_fixed[2])
 
                     # Keep wrist yaw stable at 0 degrees instead of servoing
                     yaw_velocity = 0.0 - joint_state['wrist_yaw_pos']
@@ -429,6 +419,7 @@ def run(robot, exposure='low', op='close'):
                     yaw = joint_state['wrist_yaw_pos']
                     pitch = -joint_state['wrist_pitch_pos']
                     roll = -joint_state['wrist_roll_pos']
+
                     r = Rotation.from_euler('yxz', [yaw, pitch, roll]).as_matrix()
                     rotated_lift = np.matmul(r, np.array([0.0, -1.0, 0.0]))
                     rotated_arm = np.matmul(r, np.array([0.0, 0.0, 1.0]))
@@ -437,22 +428,12 @@ def run(robot, exposure='low', op='close'):
                     lift_velocity = np.dot(rotated_lift, position_error)
                     arm_velocity = np.dot(rotated_arm, position_error)
 
-                    k_face = 1.0
                     k_base = 5.0
-                    max_rotation = 0.25
-                    rotation_tolerance = 0.001 # radians
                     alignment_tolerance = 0.002 # meters
 
-                    base_rotational_vel = np.clip(-k_face * rotation_error, -max_rotation, max_rotation)
                     base_movement = np.clip(-k_base * x_error, -2.0, 2.0)
 
                     cmd = zero_vel.copy()
-
-                    #base_rotational_velocity = np.dot(rotated_base, position_error) / (joint_state['arm_pos'] + max_gripper_length)
-                    base_rotational_velocity = np.dot(rotated_base, position_error)
-                    #print('base_rotational_velocity =', base_rotational_velocity)
-                    if abs(base_rotational_velocity) < min_base_speed:
-                        base_rotational_velocity = 0.0
 
                     #print('base_rotational_velocity =', base_rotational_velocity)
                     #print('base_odom_theta =', joint_state['base_odom_theta'])
@@ -466,7 +447,6 @@ def run(robot, exposure='low', op='close'):
                         'wrist_yaw_counterclockwise' : yaw_velocity,
                         'wrist_pitch_up' : pitch_velocity,
                         'wrist_roll_counterclockwise' : roll_velocity,
-                        'base_counterclockwise' : base_rotational_velocity
                     }
 
                     if target_error < grasp_if_error_below_this:
@@ -482,18 +462,11 @@ def run(robot, exposure='low', op='close'):
                         cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
 
                         if motion_on:
-                            print(rotation_error)
-                            print(x_error)
-                            print(x_fixed)        
-                            # if (abs(rotation_error) > rotation_tolerance):
-                            #     cmd['base_counterclockwise'] = -base_rotational_vel
-                            #     print('Aligning with Station')
-                            if (abs(x_fixed) > alignment_tolerance):
+                            if (abs(x_error) > alignment_tolerance):
                                 cmd['base_forward'] = base_movement
                                 print('Horizontally Aligning with Station')
 
-                            #if not ((abs(rotation_error) > rotation_tolerance) or (abs(x_fixed) > alignment_tolerance)):
-                            if not (abs(x_fixed) > alignment_tolerance):
+                            if not (abs(x_error) > alignment_tolerance):
                                 cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                                 cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
 
