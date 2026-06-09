@@ -89,7 +89,7 @@ joint_visual_servoing_velocity_scale = {
 ## Initial Pose
 
 joint_state_center = {
-    'lift_pos' : 1.0625,
+    'lift_pos' : 1.063,
     'arm_pos': 0.01,
     'wrist_yaw_pos': 0.0,
     'wrist_pitch_pos': -np.pi/6, # -0.523 ~ pi/6, # 0.0, #-0.6

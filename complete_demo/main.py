@@ -49,7 +49,7 @@ def rotate(robot, angle: float):
 def do_dw_pupd(robot, dw=True, put_down=False):
     # deposit/withdraw values
     DW_HEIGHT = 1.1
-    DW_LENGTH = 0.45
+    DW_LENGTH = 0.46
     PUPD_DIST = 0.05
 
     if not dw:
@@ -165,7 +165,7 @@ def main():
         robot = rb.Robot()
         robot.startup()
         
-        DEBUG = False 
+        DEBUG = True 
 
         if DEBUG:
             debug_test(robot)
@@ -173,7 +173,7 @@ def main():
         
         i = 0
 
-        while True:
+        while i < 1:
             i += 1
             print (f'=== Iteration {i} ===\n\n')
 
@@ -229,7 +229,7 @@ def main():
             print('=== Moving to Machine ===')
             move(robot, 0.9)
             rotate(robot, QUARTER_CLOCK)
-            move(robot, FROM_TRAY_TO_MACHINE)
+            move(robot, FROM_TRAY_TO_MACHINE-0.1)
 
             print('=== Aligning with Machine ===')
             base_alignment.run(robot)
@@ -295,7 +295,7 @@ def main():
             do_dw_pupd(robot, True, False)
 
             print('=== Moving to Wafer Station ===')
-            move(robot, 0.9)
+            move(robot, 0.83)
             rotate(robot, QUARTER_CLOCK)
             move(robot, -FROM_WTABLE_TO_TRAY)
             rotate(robot, QUARTER_CLOCK)
@@ -313,7 +313,7 @@ def main():
 
             print('=== Going to Machine ===')
             rotate(robot, QUARTER_COUNTERCLOCK)
-            move(robot, 1.0)
+            move(robot, 1.05)
             rotate(robot, QUARTER_CLOCK)
             move(robot, FROM_MACHINE_TO_WTABLE-0.05)
 

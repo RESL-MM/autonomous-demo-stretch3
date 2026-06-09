@@ -280,7 +280,7 @@ def run(robot, tag_name, exposure='low', horizontal_align=True):
                         wafer_station_norm = m['z_axis']     
 
                 if wafer_station_pos is not None:
-                    wafer_station = np.array([wafer_station_pos[1]-0.02, -wafer_station_pos[0], wafer_station_pos[2]])
+                    wafer_station = np.array([wafer_station_pos[1]-0.04, -wafer_station_pos[0], wafer_station_pos[2]])
                     wafer_station_normal = np.array([wafer_station_norm[1], -wafer_station_norm[0], wafer_station_norm[2]])
                     wafer_station_normal = wafer_station_normal / np.linalg.norm(wafer_station_normal)                 
                                                                                          
