@@ -89,7 +89,7 @@ joint_visual_servoing_velocity_scale = {
 ## Initial Pose
 
 joint_state_center = {
-    'lift_pos' : 1.063,
+    'lift_pos' : 1.06275,
     'arm_pos': 0.01,
     'wrist_yaw_pos': 0.0,
     'wrist_pitch_pos': -np.pi/6, # -0.523 ~ pi/6, # 0.0, #-0.6
@@ -518,7 +518,7 @@ def run(robot, exposure='low'):
 
                 wait_duration = 8       # 0.5 seconds at 15Hz
                 press_duration = 60     # ~0.8 * 5 seconds of arm extension at 15Hz
-                hold_duration = 150     # 10 seconds at 15Hz
+                hold_duration = 210     # 12 seconds at 15Hz
 
                 if lock_phase == 'wait_before_press':
                     cmd = zero_vel.copy()
@@ -530,7 +530,7 @@ def run(robot, exposure='low'):
 
                 elif lock_phase == 'press':
                     cmd = {
-                        'arm_out': 0.05,
+                        'arm_out': 0.04,
                     }
                     cmd = {k: overall_visual_servoing_velocity_scale * v for (k,v) in cmd.items()}
                     cmd = {k: joint_visual_servoing_velocity_scale.get(k, 1.0) * v for (k,v) in cmd.items()}

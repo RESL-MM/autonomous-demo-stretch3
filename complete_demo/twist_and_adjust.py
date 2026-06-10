@@ -541,6 +541,10 @@ def run(robot, exposure='low', op='close'):
                         cmd = zero_vel.copy()
                         cmd['wrist_roll_counterclockwise'] = np.clip(roll_error * lock_roll_gain, -lock_roll_max_vel, lock_roll_max_vel)
                         cmd['wrist_pitch_up'] = pitch_hold_vel
+                        if joint_state['gripper_pos'] >= (0.3 * max_joint_state['gripper_pos']):
+                                cmd['gripper_open'] = -gripper_open_speed
+                        else:
+                            cmd['gripper_open'] = 0.0
                         
                         if motion_on:
                             cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
@@ -590,10 +594,8 @@ def run(robot, exposure='low', op='close'):
                 
                 elif lock_phase == 'rotating_cw':
                     target_roll = 0.950 * mop  # +45 degrees
-                    target_grip = 50
                     
                     roll_error = target_roll - joint_state['wrist_roll_pos']
-                    grip_error = target_grip - joint_state['gripper_pos']
                     
                     if abs(roll_error) < 0.1:
                         print('LOCK: CW rotation complete! Stopping controller and retracting...')
@@ -618,9 +620,6 @@ def run(robot, exposure='low', op='close'):
                         cmd = zero_vel.copy()
                         cmd['wrist_roll_counterclockwise'] = np.clip(roll_error * lock_roll_gain, -lock_roll_max_vel, lock_roll_max_vel)
                         cmd['wrist_pitch_up'] = pitch_hold_vel
-                        
-                        if abs(grip_error) > 1:
-                            cmd['gripper_open'] = -gripper_open_speed/2
                         
                         if motion_on:
                             cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}

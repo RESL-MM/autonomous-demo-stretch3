@@ -26,6 +26,8 @@ NEXT_TO_MACHINE_OR_TRAY = 0.80
 FROM_WTABLE_TO_TRAY = 1
 FROM_TRAY_TO_MACHINE = 1.0
 
+DEBUGGING = False
+
 def default_gripper(robot):
     robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
     robot.end_of_arm.move_to('wrist_pitch', 0.0)
@@ -37,7 +39,7 @@ def default_gripper(robot):
 def move(robot, distance: float):
     robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
     robot.end_of_arm.move_to('wrist_pitch', 0.0)
-    robot.base.translate_by(distance, v_m=0.75)
+    robot.base.translate_by(distance, v_m=1.0)
     robot.push_command()
     print(f"waited for move by {distance}m command? {robot.wait_command(timeout=60.0)}")
 
@@ -95,8 +97,9 @@ def do_dw_pupd(robot, dw=True, put_down=False):
 
     robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
 
-def debug_test(robot):    
-    machine_op_debug(robot)
+def debug_test(robot):   
+    button_op_test(robot) 
+    # machine_op_debug(robot)
     # go_to_tray_debug(robot)
     return
 
@@ -157,6 +160,20 @@ def machine_op_debug(robot):
 
     button_and_adjust.run(robot)
 
+def button_op_test(robot):
+    for i in range (0,5):
+        print('=== Aligning with Machine ===')
+        base_alignment.run(robot)
+
+        print('=== Moving to Push Button ===')
+        move(robot, -0.02)
+
+        print('=== Pausing for 1 second ===')
+        time.sleep(1.0)
+
+        button_and_adjust.run(robot)
+            
+        move(robot, -0.15)
 
 
 
@@ -165,7 +182,7 @@ def main():
         robot = rb.Robot()
         robot.startup()
         
-        DEBUG = True 
+        DEBUG = False 
 
         if DEBUG:
             debug_test(robot)
@@ -175,7 +192,8 @@ def main():
 
         while i < 1:
             i += 1
-            print (f'=== Iteration {i} ===\n\n')
+
+            print(f'=== iteration: {i} ===\n\n')
 
             print('=== Aligning with Machine ===')
             base_alignment.run(robot)

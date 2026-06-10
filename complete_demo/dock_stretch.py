@@ -12,6 +12,7 @@ from hello_helpers import hello_misc as hm
 import loop_timer as lt
 from stretch_body import robot_params
 from stretch_body import hello_utils as hu
+import time
 
 def get_dxl_joint_limits(joint):
     # method to get dynamixel joint limits in radians from robot params
@@ -152,10 +153,8 @@ vel_cmd_to_pos = { v:k for (k,v) in pos_to_vel_cmd.items() }
 ####################################
 
 def recenter_robot(robot):
-    pan = np.pi/2.0
-    tilt = -np.pi/2.0
-    robot.head.move_to('head_pan', pan)
-    robot.head.move_to('head_tilt', tilt)
+    robot.head.move_to('head_pan', -np.pi)
+    robot.head.move_to('head_tilt', -np.pi/6)
     robot.push_command()
     robot.wait_command()
 
@@ -173,7 +172,7 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
     
-    robot.lift.move_to(0.9)
+    robot.lift.move_to(0.3)
     robot.push_command()
     robot.wait_command()
 
@@ -190,9 +189,6 @@ def run(robot, exposure='low'):
         recenter_robot(robot)
         controller = nvc.NormalizedVelocityControl(robot)
         controller.reset_base_odometry()
-        
-        robot.head.move_to('head_pan', -np.pi)
-        robot.head.move_to('head_tilt', 0.0)
 
         return
 
@@ -408,3 +404,18 @@ def run(robot, exposure='low'):
         if pipeline is not None:
             pipeline.stop()
 
+def main():
+    robot = rb.Robot()
+
+    if not robot.startup():
+        print("Failed to start robot")
+        return
+
+    try:
+        run(robot)
+    finally:
+        robot.stop()
+
+
+if __name__ == "__main__":
+    main()
