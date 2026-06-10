@@ -305,7 +305,7 @@ def run(robot, tag_name, exposure='low', horizontal_align=True):
             if wafer_station is not None:         
                 position_error = wafer_station # - between_fingertips
                 if tag_name == 'tray' and horizontal_align:
-                    position_error[0] += 0.045
+                    position_error[0] += 0.0645
                 target_error = np.linalg.norm(position_error)
                 rotation_error = np.arctan2(-wafer_station_normal[0], -wafer_station_normal[2])
                 print('target_error = {:.2f} cm'.format(100.0 * target_error))

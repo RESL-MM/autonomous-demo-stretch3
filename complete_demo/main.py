@@ -49,7 +49,7 @@ def rotate(robot, angle: float):
 def do_dw_pupd(robot, dw=True, put_down=False):
     # deposit/withdraw values
     DW_HEIGHT = 1.1
-    DW_LENGTH = 0.45
+    DW_LENGTH = 0.46
     PUPD_DIST = 0.05
 
     if not dw:
@@ -96,8 +96,8 @@ def do_dw_pupd(robot, dw=True, put_down=False):
     robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
 
 def debug_test(robot):    
-    # machine_op_debug(robot)
-    go_to_tray_debug(robot)
+    machine_op_debug(robot)
+    # go_to_tray_debug(robot)
     return
 
 def go_to_tray_debug(robot):
@@ -114,48 +114,48 @@ def go_to_tray_debug(robot):
                         
 
 def machine_op_debug(robot):
-    for i in range (0,5):
-        print('=== Aligning with Machine ===')
-        base_alignment.run(robot)
+    #for i in range (0,5):
+    print('=== Aligning with Machine ===')
+    base_alignment.run(robot)
 
-        move(robot, 0.12)
+    move(robot, 0.12)
 
-        print('=== Opening the Machine ===')
-        twist_and_adjust.run(robot, op='open')
-            
-        move(robot, -0.2)
+    print('=== Opening the Machine ===')
+    twist_and_adjust.run(robot, op='open')
+        
+    move(robot, -0.2)
 
-        print('=== Aligning with Machine ===')
-        base_alignment.run(robot)
+    print('=== Aligning with Machine ===')
+    base_alignment.run(robot)
 
-        print('=== Moving to Push Button ===')
-        move(robot, -0.02)
+    print('=== Moving to Push Button ===')
+    move(robot, -0.02)
 
-        print('=== Pausing for 1 second ===')
-        time.sleep(1.0)
+    print('=== Pausing for 1 second ===')
+    time.sleep(1.0)
 
-        button_and_adjust.run(robot)
+    button_and_adjust.run(robot)
 
-        print('=== Aligning with Machine ===')
-        base_alignment.run(robot)
+    print('=== Aligning with Machine ===')
+    base_alignment.run(robot)
 
-        move(robot, 0.12)
+    move(robot, 0.12)
 
-        print('=== Closing the Machine ===')
-        twist_and_adjust.run(robot, op='close')
-            
-        move(robot, -0.25)
+    print('=== Closing the Machine ===')
+    twist_and_adjust.run(robot, op='close')
+        
+    move(robot, -0.25)
 
-        print('=== Aligning with Machine ===')
-        base_alignment.run(robot)
+    print('=== Aligning with Machine ===')
+    base_alignment.run(robot)
 
-        print('=== Moving to Push Button ===')
-        move(robot, -0.02)
+    print('=== Moving to Push Button ===')
+    move(robot, -0.02)
 
-        print('=== Pausing for 1 second ===')
-        time.sleep(1.0)
+    print('=== Pausing for 1 second ===')
+    time.sleep(1.0)
 
-        button_and_adjust.run(robot)
+    button_and_adjust.run(robot)
 
 
 
@@ -165,174 +165,181 @@ def main():
         robot = rb.Robot()
         robot.startup()
         
-        DEBUG = False 
+        DEBUG = True 
 
         if DEBUG:
             debug_test(robot)
             return
-
-        print('=== Aligning with Machine ===')
-        base_alignment.run(robot)
-
-        move(robot, 0.12)
-
-        print('=== Opening the Machine ===')
-        twist_and_adjust.run(robot, op='open')
-            
-        move(robot, -0.25)
-
-        print('=== Aligning with Machine ===')
-        base_alignment.run(robot)
-
-        print('=== Moving to Push Button ===')
-        move(robot, -0.02)
-
-        print('=== Pausing for 1 second ===')
-        time.sleep(1.0)
-
-        button_and_adjust.run(robot)
-
-        print('=== Going to Pick Up Wafer ===')
-        move(robot, -FROM_MACHINE_TO_WTABLE)
-        rotate(robot, QUARTER_CLOCK)
-
-        print('=== Pausing for 1 sec ===')
-        time.sleep(1.0)
-
-        print('=== Aligning with Wafer Station ==')
-        station_navigation.run(robot, 'wafer_station', horizontal_align=False)
-
-        rotate(robot, QUARTER_COUNTERCLOCK)
-
-        station_navigation.run(robot, 'wafer_station', horizontal_align=True)
-
-        print('=== Picking Up Wafer ===')
-        do_dw_pupd(robot, False, False)
-
-        print('=== Moving to Tray ===')
-        station_navigation.run(robot, 'tray', horizontal_align=False)
-
-        rotate(robot, QUARTER_COUNTERCLOCK)
-
-        print('=== Aligning with Tray ===')
-        station_navigation.run(robot, 'tray', horizontal_align=True)
-
-        print('=== Depositing Wafer ===')
-        do_dw_pupd(robot, True, True)
-
-        print('=== Moving to Machine ===')
-        move(robot, 0.9)
-        rotate(robot, QUARTER_CLOCK)
-        move(robot, FROM_TRAY_TO_MACHINE)
-
-        print('=== Aligning with Machine ===')
-        base_alignment.run(robot)
-
-        move(robot, 0.12)
-
-        print('=== Closing the Machine ===')
-        twist_and_adjust.run(robot, op='close')
-            
-        move(robot, -0.25)
-
-        print('=== Aligning with Machine ===')
-        base_alignment.run(robot)
-
-        print('=== Moving to Push Button ===')
-        move(robot, -0.02)
-
-        print('=== Pausing for 1 second ===')
-        time.sleep(1.0)
-
-        button_and_adjust.run(robot)
-
-        # HEILUHWUHF
         
-        time.sleep(5) # simulate waiting for recipe to run-- TODO: extend by having stretch dock and undock
+        i = 0
 
-        print('=== Aligning with Machine ===')
-        base_alignment.run(robot)
+        while i < 1:
+            i += 1
+            print (f'=== Iteration {i} ===\n\n')
 
-        move(robot, 0.12)
+            print('=== Aligning with Machine ===')
+            base_alignment.run(robot)
 
-        print('=== Opening the Machine ===')
-        twist_and_adjust.run(robot, op='open')
+            move(robot, 0.12)
+
+            print('=== Opening the Machine ===')
+            twist_and_adjust.run(robot, op='open')
+                
+            move(robot, -0.25)
+
+            print('=== Aligning with Machine ===')
+            base_alignment.run(robot)
+
+            print('=== Moving to Push Button ===')
+            move(robot, -0.02)
+
+            print('=== Pausing for 1 second ===')
+            time.sleep(1.0)
+
+            button_and_adjust.run(robot)
+
+            print('=== Going to Pick Up Wafer ===')
+            move(robot, -FROM_MACHINE_TO_WTABLE)
+            rotate(robot, QUARTER_CLOCK)
+
+            print('=== Pausing for 1 sec ===')
+            time.sleep(1.0)
+
+            print('=== Aligning with Wafer Station ==')
+            station_navigation.run(robot, 'wafer_station', horizontal_align=False)
+
+            rotate(robot, QUARTER_COUNTERCLOCK)
+
+            station_navigation.run(robot, 'wafer_station', horizontal_align=True)
+
+            print('=== Picking Up Wafer ===')
+            do_dw_pupd(robot, False, False)
+
+            print('=== Moving to Tray ===')
+            station_navigation.run(robot, 'tray', horizontal_align=False)
+
+            rotate(robot, QUARTER_COUNTERCLOCK)
+
+            print('=== Aligning with Tray ===')
+            station_navigation.run(robot, 'tray', horizontal_align=True)
+
+            print('=== Depositing Wafer ===')
+            do_dw_pupd(robot, True, True)
+
+            print('=== Moving to Machine ===')
+            move(robot, 0.9)
+            rotate(robot, QUARTER_CLOCK)
+            move(robot, FROM_TRAY_TO_MACHINE-0.1)
+
+            print('=== Aligning with Machine ===')
+            base_alignment.run(robot)
+
+            move(robot, 0.12)
+
+            print('=== Closing the Machine ===')
+            twist_and_adjust.run(robot, op='close')
+                
+            move(robot, -0.25)
+
+            print('=== Aligning with Machine ===')
+            base_alignment.run(robot)
+
+            print('=== Moving to Push Button ===')
+            move(robot, -0.02)
+
+            print('=== Pausing for 1 second ===')
+            time.sleep(1.0)
+
+            button_and_adjust.run(robot)
+
+            # HEILUHWUHF
             
-        move(robot, -0.2)
+            time.sleep(5) # simulate waiting for recipe to run-- TODO: extend by having stretch dock and undock
 
-        print('=== Aligning with Machine ===')
-        base_alignment.run(robot)
+            print('=== Aligning with Machine ===')
+            base_alignment.run(robot)
 
-        print('=== Moving to Push Button ===')
-        move(robot, -0.02)
+            move(robot, 0.12)
 
-        print('=== Pausing for 1 second ===')
-        time.sleep(1.0)
+            print('=== Opening the Machine ===')
+            twist_and_adjust.run(robot, op='open')
+                
+            move(robot, -0.2)
 
-        button_and_adjust.run(robot)
+            print('=== Aligning with Machine ===')
+            base_alignment.run(robot)
 
-        print('=== Moving to Tray ===')
-        move(robot, -FROM_TRAY_TO_MACHINE-0.5)
-        rotate(robot, QUARTER_COUNTERCLOCK)
-        move(robot, -0.9)
-        rotate(robot, QUARTER_CLOCK)
+            print('=== Moving to Push Button ===')
+            move(robot, -0.02)
 
-        print('=== Moving to Tray ===')
-        station_navigation.run(robot, 'tray', horizontal_align=False)
+            print('=== Pausing for 1 second ===')
+            time.sleep(1.0)
 
-        rotate(robot, QUARTER_COUNTERCLOCK)
+            button_and_adjust.run(robot)
 
-        print('=== Aligning with Tray ===')
-        station_navigation.run(robot, 'tray', horizontal_align=True)
+            print('=== Moving to Tray ===')
+            move(robot, -FROM_TRAY_TO_MACHINE-0.5)
+            rotate(robot, QUARTER_COUNTERCLOCK)
+            move(robot, -0.9)
+            rotate(robot, QUARTER_CLOCK)
 
-        print('=== Withdrawing Wafer ===')
-        do_dw_pupd(robot, True, False)
+            print('=== Moving to Tray ===')
+            station_navigation.run(robot, 'tray', horizontal_align=False)
 
-        print('=== Moving to Wafer Station ===')
-        move(robot, 0.9)
-        rotate(robot, QUARTER_CLOCK)
-        move(robot, -FROM_WTABLE_TO_TRAY)
-        rotate(robot, QUARTER_CLOCK)
+            rotate(robot, QUARTER_COUNTERCLOCK)
 
-        print('=== Going to with Wafer Station ==')
-        station_navigation.run(robot, 'wafer_station', horizontal_align=False)
+            print('=== Aligning with Tray ===')
+            station_navigation.run(robot, 'tray', horizontal_align=True)
 
-        rotate(robot, QUARTER_COUNTERCLOCK)
+            print('=== Withdrawing Wafer ===')
+            do_dw_pupd(robot, True, False)
 
-        print('=== Aligning with Wafer Station ==')
-        station_navigation.run(robot, 'wafer_station', horizontal_align=True)
+            print('=== Moving to Wafer Station ===')
+            move(robot, 0.83)
+            rotate(robot, QUARTER_CLOCK)
+            move(robot, -FROM_WTABLE_TO_TRAY)
+            rotate(robot, QUARTER_CLOCK)
 
-        print('=== Putting Down Wafer ===')
-        do_dw_pupd(robot, False, True)
+            print('=== Going to with Wafer Station ==')
+            station_navigation.run(robot, 'wafer_station', horizontal_align=False)
 
-        print('=== Going to Machine ===')
-        rotate(robot, QUARTER_COUNTERCLOCK)
-        move(robot, 1.0)
-        rotate(robot, QUARTER_CLOCK)
-        move(robot, FROM_MACHINE_TO_WTABLE-0.05)
+            rotate(robot, QUARTER_COUNTERCLOCK)
 
-        print('=== Aligning with Machine ===')
-        base_alignment.run(robot)
+            print('=== Aligning with Wafer Station ==')
+            station_navigation.run(robot, 'wafer_station', horizontal_align=True)
 
-        move(robot, 0.12)
+            print('=== Putting Down Wafer ===')
+            do_dw_pupd(robot, False, True)
 
-        print('=== Closing the Machine ===')
-        twist_and_adjust.run(robot, op='close')
-            
-        move(robot, -0.25)
+            print('=== Going to Machine ===')
+            rotate(robot, QUARTER_COUNTERCLOCK)
+            move(robot, 1.05)
+            rotate(robot, QUARTER_CLOCK)
+            move(robot, FROM_MACHINE_TO_WTABLE-0.05)
 
-        print('=== Aligning with Machine ===')
-        base_alignment.run(robot)
+            print('=== Aligning with Machine ===')
+            base_alignment.run(robot)
 
-        print('=== Moving to Push Button ===')
-        move(robot, -0.02)
+            move(robot, 0.12)
 
-        print('=== Pausing for 1 second ===')
-        time.sleep(1.0)
+            print('=== Closing the Machine ===')
+            twist_and_adjust.run(robot, op='close')
+                
+            move(robot, -0.25)
 
-        button_and_adjust.run(robot)
+            print('=== Aligning with Machine ===')
+            base_alignment.run(robot)
 
-        print('=== Complete Demo Done! ===')
+            print('=== Moving to Push Button ===')
+            move(robot, -0.02)
+
+            print('=== Pausing for 1 second ===')
+            time.sleep(1.0)
+
+            button_and_adjust.run(robot)
+
+            print('=== Complete Demo Done! ===')
+            move(robot, -0.25)
         
     finally:
         if robot is not None:
