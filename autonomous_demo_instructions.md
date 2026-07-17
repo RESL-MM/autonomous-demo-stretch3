@@ -19,13 +19,13 @@
 	- SSH into the robot using the following command:  ```ssh -X hello-robot@192.168.0.124```
 - Home and Perform a System Check on the Robot
 	- The maintenance scripts are global and can be called from any directory on the robot
-	- In general, before running any scripts or processes, it is a good habit to run ```stretch_free_robot_processes.py```
+	- In general, before running any scripts or processes, it is a good habit to run ```stretch_free_robot_process.py```
 	- To home and perform a system check, run the following commands **(wait for confirmation in the terminal that the previous command is finished before running the next command)**:
-		- ```stretch_free_robot_processes.py```
+		- ```stretch_free_robot_process.py```
 		- ```stretch_robot_home.py```
-		- ```stretch_free_robot_processes.py```
+		- ```stretch_free_robot_process.py```
 		- ```stretch_robot_system_check.py```
-		- ```stretch_free_robot_processes.py```
+		- ```stretch_free_robot_process.py```
 	- **Some things to note:**
 		- the maintenance scripts can be auto completed by hitting tab after enough of the command has been entered, so it's not necessary to type out the entire thing every time
 		- there may be some warnings or out of date packages brought up by the system check, those are not an issue for now and can be ignored
