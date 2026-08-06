@@ -1,35 +1,94 @@
-### Hello Robot Stretch3 Demo for Autonomous Operation in the Microfabrication Cleanroom
+# Stretch3 Autonomous Microfabrication Demo
 
-#### High Level Overview
-The aim of this project is to present a minimum viable demo that showcases the Stretch 3's autonomous operation in the microfabrication cleanroom as a basis for proposing further research into the use of autonomous mobile manipulators in a microfabrication cleanroom environment.
+This repo consists of scripts and documentation needed for an autonomous mobile manipulator routine for use in a university microfabrication cleanroom environment.
 
-The current scope of the project is producing a video that shows a complete and successful iteration of wafer etching process using the Oxford RIE80 etcher. A complete and successful single iteration comprises of the Stretch3 being able to open/close the RIE80, navigate between stations, and deposit/withdraw a wafer from a station and the machine. In theory, by showing a single, somewhat smart/autonomous approach to the problem, we have a basis to show that such operation could be extended to as many iterations as needed and for completely autonomous operation.
+Specifically, it contains code for the Hello Robot Stretch3 to autonomously perform a wafer loading and unloading sequence for an Oxford RIE80 Etcher in which the robot aligns with and operates the machine and navigates between predefined stations (wafer table and RIE80).
 
-#### Current Approach
-We are currently working on the demo in a relatively fixed location and setup, i.e. the MCB cleanroom RIE80 area, and as such our approach to the problem is combining a series of fixed, coarse grained actions with fine grained error correction loops between fixed operation steps.
+The demo combines pre-defined coarse-grained movement in a fixed environment and fine-grained error correction and adjustments using ArUco markers, a head-mounted D435 camera, and a gripper-mounted D405 camera for manipulation tasks.
 
-For interaction with the RIE80 and the wafers to be etched, we have attached a vacuum pen to the gripper using a CAD printed tool. While this helps solve the issue of being able to deposit and withdraw wafers, it means our gripper camera view is obstructed and is something to keep in mind (elaborated upon later).
+## Project Status
 
-For example, since we know roughly how far the station is from the machine, we can move the robot roughly some distance (using the existing Hello Robot Stretch3 body library) from the machine to the station and then correct for orientation and distance offshoots (e.g. drift) after the fact.
+The repo currently holds a minimum viable demo in the `autonomous_demo` directory for use in a fixed environment (The John O'Brien Nanofabrication Laboratory @ USC) and for operational testing/data collection.
 
-As it stands, our current approach for error correction boils down to the use of Aruco tags at key locations that can be used to localise the robot and correct any errors before performing the necessary next steps in the iteration. I.e. instead of implementing some form of continuous error correction and trajectory calculation throughout the process, we have opted for a means of fixing the robot's position and setting it up to carry out a predefined task at each step in the process; as long as the robot starts in the same position and orientation before starting a subtask, the actions performed in the subtask will be the same (e.g. extend arm out by X meters, down by Y meters, etc.). Though somewhat of a naive approach, for the purposes of a demo and given the nature of the Stretch3 body library, we feel that this is a good enough approach for creating a full demo that showcases a level of autonomy and physical capability that can then be improved upon and optimised when moving towards actual day-to-day use development.
+## Project Documentation
 
-The Stretch3 is equipped with two cameras, a head mounted D435 camera and a gripper mounted D405 camera, that we use to perform positional error correction and manipulation tasks-- the former is used for movement to and alignment with the RIE80 and wafer station, while the latter is used for fine grained manipulation tasks like twisting the dial and pressing the button on the RIE80 to operate it.
+- [Operation instructions](docs/autonomous_demo_instructions.md): safety, physical preparation, execution, interruption, and shutdown
+- [Project overview](docs/project-report.md): project overview, specifics, considerations, and future work
 
-#### Examples of Error Correction Using the Head and Gripper Mounted Cameras
-Camera error correction is done using the existing camera and aruco helpers found in the [Hello Robot Stretch3 Visual Servoing Library](https://github.com/hello-robot/stretch_visual_servoing), and majority of the logic behind the gripper mounted manipulation tasks is reusing and reworking majority of the servoing logic.
+## Demo Workflow
 
-Head Mounted D435 Camera
-- Given an Aruco tag pasted in line with a station (e.g. wafer station) with some positional offset from the desired target (e.g. 25 cm in front of the tag = 5 cm in front of the station, specified using the tag ID and an offset config file), the head mounted cam can get the X, Y, Z error of the tag relative to its camera frame.
-- Using this positional error vector alongside tag information such as it's unit Z vector in camera frame coordinates, we are able to calculate the rotational error (needed to face the tag head on) and horizontal or depth error (depending on if moving to a station or aligning with a station) of the tag.
+A complete demo is defined as a single iteration of the following wafer loading and unloading sequence:
 
-Gripper Mounted D405 Camera
-- Given the obstruction of the center of the gripper camera's point of view by the vacuum pen, any fine grain manipulation that needs to be performed by the Stretch3 hinges on using bi-lateration with two Aruco tags on the left and right of the object to be manipulated.
-- Similar to the head mounted camera, we use the positional errors calculated in the camera frame and adjust our position based on those values and the distance to our target; however, in the case of the gripper we take our target point to be the midpoint (or thereabouts depending on the operation, as it changes slightly due to tool offsets for different tasks) of the two tags.
+(0. assume robot starts generally near and roughly perpendicular to the RIE80)
+1. Align with and open the RIE80
+2. Navigate to + align with Wafer Station and pick up wafer
+3. Navigate to + align with machine tray and deposit wafer
+4. Navigate to + align with machine and close the RIE80
+5. Wait (simulate recipe being run and wafer being etched)*
+6. Align with and open the RIE80
+7. Navigate to + align with machine tray and withdraw wafer
+8. Navigate to + align with Wafer Station and put down wafer
+9. Navigate to + align with machine and close the RIE80
 
-#### The Important Scripts
-We are currently working on 5 scripts that govern the entire demo-- complete_demo.py, twist_and_adjust.py, button_and_adjust.py, base_alignment.py, and station_navigation.py
+Iteration Complete!
 
-**will fill in this section later, need to clean up codebase**
+> * recipe running and robot navigation to charging/docking station while waiting to be implemented
 
-#### Further Considerations and Future Changes
+## Repository Structure
+
+```text
+autonomous-demo-stretch3/
+├── README.md
+├── autonomous_demo/
+│   ├── main.py
+│   ├── aruco_marker_info.yaml
+│   ├── base_alignment.py
+│   ├── station_navigation.py
+│   ├── twist_and_adjust.py
+│   ├── button_and_adjust.py
+│   └── ...
+├── docs/
+│   ├── autonomous_demo_instructions.md
+│   └──  project-report.md
+└── misc/
+    └── ...old, incomplete, or experimental scripts
+```
+
+## Main Components
+| File | Responsibility |
+| --- | --- |
+| `main.py` | Coordinates the supporting scripts and carries out demo iterations |
+| `base_alignment.py` | Aligns markers on the robot base with markers on the floor |
+| `station_navigation.py` | Locates and approaches the tray or wafer station |
+| `twist_and_adjust.py` | Visually aligns with and turns the machine dial |
+| `button_and_adjust.py` | Visually aligns with and presses the machine button |
+| `normalized_velocity_control.py` | Converts normalized servo commands into robot joint and base commands |
+| `aruco_detector.py` | Detects ArUco markers and estimates their poses |
+| `aruco_to_fingertips.py` | Converts finger-marker poses into estimated fingertip poses |
+| `d405_helpers.py` | Configures and reads the gripper-mounted D405 camera |
+| `d435_helpers.py` | Configures and reads the head-mounted D435 camera |
+| `aruco_marker_info.yaml` | Defines marker dimensions and names |
+
+## Hardware and Software
+
+### Hardware
+- Hello Robot Stretch3
+- Intel RealSense D435 head camera (included with Stretch3)
+- Intel RealSense D405 gripper camera (included with Stretch3)
+- Custom Printed End-Effector
+    - Dual purpose: allow for interaction with machine dial and button while holding the vacuum wand in place (such that it can be actuated by the Stretch3 gripper)
+- ArUco markers placed at key locations for vision based error correction
+    - e.g. on the sides of the machine dial for gripper servoing and the floor for perpendicular base alignment with the RIE80
+- Oxford RIE80 Etcher
+
+### Software
+The demo heavily builds off and adapts code from the [Hello Robot Stretch3 repositories](https://github.com/hello-robot/stretch_body), and in particular the [visual servoing repo](https://github.com/hello-robot/stretch_visual_servoing)
+
+## Running the Demo
+Read the [operation instructions](docs/autonomous_demo_instructions.md)
+
+After all setup and preparations have been completed, then run the following from the repo when SSH'd into or directly using the Stretch3:
+```bash
+cd autonomous_demo
+python3 main.py
+```
