@@ -1,4 +1,4 @@
-### Stretch3 Autonomous Demo Instructions (13-07)
+### Stretch3 Autonomous Demo Instructions (13-08)
 
 ### Important Things to Note
 - Only move the robot manually when it is in runstop mode (i.e. the battery indicator and runstop lights are flashing)
@@ -42,8 +42,9 @@
 
 ### Demo Setup and Running
 - Starting the Demo
-	- In the SSH terminal, navigate to the demo directory and run the demo script; i.e. run the following:
-		- ```cd ~/repos/autonomous-demo-stretch3/complete_demo```
+	- In the SSH terminal, navigate to the demo directory, ensure the latest version of the demo (git pull), and run the demo script; i.e. run the following:
+		- ```cd ~/repos/autonomous-demo-stretch3/autonomous_demo```
+		- ```git pull```
 		- ```python3 main.py```
 - Demo Running
 	- As it stands, the demo will run for 1 complete iteration and then the program will exit if all goes well

@@ -166,7 +166,7 @@ vel_cmd_to_pos = { v:k for (k,v) in pos_to_vel_cmd.items() }
 ####################################
 
 def recenter_robot(robot):
-    """Move the robot into the calibrated starting pose for dial servoing.
+    """Move the robot to a defined home position.
 
     Args:
         robot: a started ``stretch_body.robot.Robot`` instance.
@@ -205,7 +205,7 @@ def recenter_robot(robot):
     robot.wait_command()
 
 def run(robot, exposure='low', op='close'):
-    """Approach and turn the RIE80 dial using D405 visual servoing.
+    """Approach and turn the RIE80 dial while correcting positional error.
 
     The ``reach`` behavior estimates the dial target from its surrounding ArUco
     markers and reduces the error between the target and gripper fingertips.
@@ -219,14 +219,6 @@ def run(robot, exposure='low', op='close'):
             supported numeric exposure value.
         op: requested dial operation. ``close`` selects the closing direction;
             every other value currently selects the opening direction.
-
-    Side effects:
-        Starts the D405 pipeline and normalized velocity controller, moves the
-        base and manipulator, and prints per-frame diagnostic output.
-
-    Termination:
-        Returns after pose restoration or a lock-phase timeout. The controller
-        and camera pipeline are stopped in the ``finally`` block.
     """
     controller = None
     pipeline = None

@@ -162,7 +162,7 @@ vel_cmd_to_pos = { v:k for (k,v) in pos_to_vel_cmd.items() }
 ####################################
 
 def recenter_robot(robot):
-    """Move the robot to a defined home positoin.
+    """Move the robot to a defined home position.
 
     Args:
         robot: a started ``stretch_body.robot.Robot`` instance.
@@ -197,7 +197,7 @@ def recenter_robot(robot):
         
 
 def run(robot, exposure='low'):
-    """Approach and press the button on the RIE80 while correction positional error
+    """Approach and press the button on the RIE80 while correcting positional error
 
     Args:
         robot: a started ``stretch_body.robot.Robot`` instance positioned near
@@ -280,8 +280,6 @@ def run(robot, exposure='low'):
             image = np.copy(color_image)
 
             if detect_aruco_button_on:                                                         
-                # Estimate the button target from either or both surrounding
-                # markers, then estimate fingertip poses from the finger tags.
                 aruco_detector.update(color_image, camera_info)                             
                 markers = aruco_detector.get_detected_marker_dict()                         
                 fingertips = aruco_to_fingertips.get_fingertips(markers)                    
@@ -322,9 +320,7 @@ def run(robot, exposure='low'):
                 print(target_name + ' Detection: FAILED')
             else:
                 print(target_name + ' Detection: SUCCEEDED')
- 
-            fingertip_left_pose = None
-            fingertip_right_pose = None
+
             f = fingertips.get('left', None)
             if f is not None:
                 fingertip_left_pos = f['pos']
@@ -456,7 +452,6 @@ def run(robot, exposure='low'):
 
                     cmd = zero_vel.copy()
 
-                    #base_rotational_velocity = np.dot(rotated_base, position_error) / (joint_state['arm_pos'] + max_gripper_length)
                     base_rotational_velocity = np.dot(rotated_base, position_error)
                     #print('base_rotational_velocity =', base_rotational_velocity)
                     if abs(base_rotational_velocity) < min_base_speed:
