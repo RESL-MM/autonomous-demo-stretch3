@@ -1,3 +1,13 @@
+"""Visually approach or laterally align with a tagged work station.
+
+The routine uses the head-mounted D435 camera to locate an ArUco marker for the
+wafer station or RIE80 tray. It can either reduce depth error while approaching
+a station or reduce horizontal error after the robot has turned beside it.
+
+This module commands physical hardware and assumes marker names and dimensions
+match ``aruco_marker_info.yaml``.
+"""
+
 import d435_helpers as dh
 import pyrealsense2 as rs
 import numpy as np
@@ -183,6 +193,15 @@ def recenter_robot(robot):
         
 
 def run(robot, tag_name, exposure='low', horizontal_align=True):
+    """Approach or horizontally align with a named station marker.
+
+    Args:
+        robot: a started ``stretch_body.robot.Robot`` instance.
+        tag_name: marker name from ``aruco_marker_info.yaml``
+        exposure: D435 exposure preset (``low``, ``medium``, or ``auto``)
+        horizontal_align: when ``True``, robot will laterally align with
+         specified tag_name; when ``False``, move forward towards the tag.
+    """
     controller = None
     pipeline = None
 
@@ -225,6 +244,7 @@ def run(robot, tag_name, exposure='low', horizontal_align=True):
 
         fingertips = {}
         
+        # Process camera frames until the active alignment tolerances are met.
         while True:
             loop_timer.start_of_iteration()
 
@@ -265,6 +285,8 @@ def run(robot, tag_name, exposure='low', horizontal_align=True):
             image = np.copy(color_image)
 
             if detect_aruco_button_on:                                                         
+                # Find the configured station marker and transform its pose
+                # into the base-control convention used below.
                 aruco_detector.update(color_image, camera_info)                             
                 markers = aruco_detector.get_detected_marker_dict()                         
                 # fingertips = aruco_to_fingertips.get_fingertips(markers)                    
@@ -317,6 +339,7 @@ def run(robot, tag_name, exposure='low', horizontal_align=True):
             prev_behavior = behavior
 
             if pre_reach:
+                # Prepare the gripper before commanding station alignment.
                 cmd = {}
 
                 gripper_ready = False
@@ -342,6 +365,8 @@ def run(robot, tag_name, exposure='low', horizontal_align=True):
 
             # elif (between_fingertips is not None) and (toy_target is not None) and (target_error <= max_distance_for_attempted_reach): 
             elif wafer_station is not None:           
+                # Compute orientation correction together with either lateral
+                # or depth motion according to ``horizontal_align``.
                 x_error, y_error, z_error = position_error
 
                 print(position_error)

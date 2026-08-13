@@ -1,3 +1,14 @@
+"""Visually align the Stretch 3 gripper with and turn the RIE80 dial.
+
+The routine uses the wrist-mounted D405 camera to observe ArUco markers around
+the dial and on the gripper fingers. A reach phase reduces the estimated pose
+error; a lock phase then executes the fixed dial-engagement and rotation
+sequence for opening or closing the machine.
+
+This module commands physical hardware and assumes the robot has already been
+coarsely positioned near the RIE80 controls.
+"""
+
 import d405_helpers as dh
 import pyrealsense2 as rs
 import numpy as np
@@ -155,6 +166,15 @@ vel_cmd_to_pos = { v:k for (k,v) in pos_to_vel_cmd.items() }
 ####################################
 
 def recenter_robot(robot):
+    """Move the robot into the calibrated starting pose for dial servoing.
+
+    Args:
+        robot: a started ``stretch_body.robot.Robot`` instance.
+
+    Side effects:
+        Commands the head, arm, wrist, lift, and gripper, blocking after each
+        pose group.
+    """
     pan = 0.0
     tilt = 0.0
     robot.head.move_to('head_pan', pan)
@@ -185,6 +205,29 @@ def recenter_robot(robot):
     robot.wait_command()
 
 def run(robot, exposure='low', op='close'):
+    """Approach and turn the RIE80 dial using D405 visual servoing.
+
+    The ``reach`` behavior estimates the dial target from its surrounding ArUco
+    markers and reduces the error between the target and gripper fingertips.
+    The ``lock`` behavior then rotates the wrist, extends the arm to engage the
+    dial, holds briefly, completes the turn, and restores the starting pose.
+
+    Args:
+        robot: a started ``stretch_body.robot.Robot`` instance positioned near
+            the RIE80 controls.
+        exposure: D405 exposure preset (``low``, ``medium``, or ``auto``) or a
+            supported numeric exposure value.
+        op: requested dial operation. ``close`` selects the closing direction;
+            every other value currently selects the opening direction.
+
+    Side effects:
+        Starts the D405 pipeline and normalized velocity controller, moves the
+        base and manipulator, and prints per-frame diagnostic output.
+
+    Termination:
+        Returns after pose restoration or a lock-phase timeout. The controller
+        and camera pipeline are stopped in the ``finally`` block.
+    """
     controller = None
     pipeline = None
     mop = MOP_CLOSE
@@ -225,6 +268,7 @@ def run(robot, exposure='low', op='close'):
 
         fingertips = {}
         
+        # Process camera frames until the dial turn completes or times out.
         while True:
             loop_timer.start_of_iteration()
 
@@ -264,6 +308,8 @@ def run(robot, exposure='low', op='close'):
             image = np.copy(color_image)
 
             if detect_aruco_button_on:                                                         
+                # Estimate the dial target from the surrounding markers and
+                # estimate fingertip poses from the finger tags.
                 aruco_detector.update(color_image, camera_info)                             
                 markers = aruco_detector.get_detected_marker_dict()                         
                 fingertips = aruco_to_fingertips.get_fingertips(markers)                    
@@ -374,6 +420,8 @@ def run(robot, exposure='low', op='close'):
             print('pre_reach =', pre_reach)
                         
             if behavior == 'reach':
+                # Visually servo until the dial is close enough for the fixed
+                # engagement and rotation sequence.
                 prev_behavior = behavior
 
                 if pre_reach:
@@ -500,6 +548,8 @@ def run(robot, exposure='low', op='close'):
                         controller.set_command(cmd)
 
             elif behavior == 'lock':
+                # Execute the wrist rotation, arm extension, hold, return
+                # rotation, and pose-restoration phases.
                 # Lock behavior: rotate CCW 50°, extend arm, hold 5s, rotate CW 100°, restore
                 if prev_behavior != 'lock':
                     lock_state_count = 0

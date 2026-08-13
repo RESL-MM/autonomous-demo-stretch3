@@ -1,3 +1,13 @@
+"""Visually align the Stretch 3 gripper with and press the RIE80 button.
+
+The routine uses the wrist-mounted D405 camera to observe ArUco markers around
+the button and on the gripper fingers. A reach phase reduces the estimated pose
+error; a lock phase then performs the fixed button-press and retraction motion.
+
+This module commands physical hardware and assumes the robot has already been
+coarsely positioned near the RIE80 controls.
+"""
+
 import d405_helpers as dh
 import pyrealsense2 as rs
 import numpy as np
@@ -152,6 +162,11 @@ vel_cmd_to_pos = { v:k for (k,v) in pos_to_vel_cmd.items() }
 ####################################
 
 def recenter_robot(robot):
+    """Move the robot to a defined home positoin.
+
+    Args:
+        robot: a started ``stretch_body.robot.Robot`` instance.
+    """
     pan = 0.0
     tilt = 0.0
     robot.head.move_to('head_pan', pan)
@@ -182,6 +197,13 @@ def recenter_robot(robot):
         
 
 def run(robot, exposure='low'):
+    """Approach and press the button on the RIE80 while correction positional error
+
+    Args:
+        robot: a started ``stretch_body.robot.Robot`` instance positioned near
+            the RIE80 controls.
+        exposure: D405 exposure preset (``low``, ``medium``, or ``auto``)
+    """
     controller = None
     pipeline = None
 
@@ -218,6 +240,7 @@ def run(robot, exposure='low'):
 
         fingertips = {}
         
+        # Process camera frames until the button press completes or times out.
         while True:
             loop_timer.start_of_iteration()
 
@@ -257,6 +280,8 @@ def run(robot, exposure='low'):
             image = np.copy(color_image)
 
             if detect_aruco_button_on:                                                         
+                # Estimate the button target from either or both surrounding
+                # markers, then estimate fingertip poses from the finger tags.
                 aruco_detector.update(color_image, camera_info)                             
                 markers = aruco_detector.get_detected_marker_dict()                         
                 fingertips = aruco_to_fingertips.get_fingertips(markers)                    
@@ -356,6 +381,8 @@ def run(robot, exposure='low'):
             print('pre_reach =', pre_reach)
                         
             if behavior == 'reach':
+                # Visually servo until the target is close enough to hand over
+                # to the deterministic button-press sequence.
                 prev_behavior = behavior
 
                 if pre_reach:
@@ -509,6 +536,8 @@ def run(robot, exposure='low'):
                         controller.set_command(cmd)
 
             elif behavior == 'lock':
+                # Execute the frame-counted wait, press, hold, and retract
+                # phases after visual alignment has finished.
                 # Lock behavior: wait 0.5s, extend arm to press, hold, then retract
                 if prev_behavior != 'lock':
                     lock_state_count = 0

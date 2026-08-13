@@ -19,6 +19,7 @@ import button_and_adjust
 import base_alignment
 import station_navigation
 
+# constants used for coarse grain navigation and orientation
 FROM_MACHINE_TO_WTABLE = 2
 QUARTER_COUNTERCLOCK = math.pi/2
 QUARTER_CLOCK = -QUARTER_COUNTERCLOCK
@@ -29,6 +30,11 @@ FROM_TRAY_TO_MACHINE = 1.0
 DEBUGGING = False
 
 def default_gripper(robot):
+    """Helper function to home the gripper.
+
+    Args:
+        robot: the current ``stretch_body.robot.Robot`` instance.
+    """
     robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
     robot.end_of_arm.move_to('wrist_pitch', 0.0)
     robot.end_of_arm.move_to('wrist_roll', 0.0)
@@ -37,6 +43,12 @@ def default_gripper(robot):
     robot.wait_command()
 
 def move(robot, distance: float):
+    """Helper function to translate the robot.
+
+    Args:
+        robot: the current ``stretch_body.robot.Robot`` instance.
+        distance: amount to translate the robot forward (in meters).
+    """
     robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
     robot.end_of_arm.move_to('wrist_pitch', 0.0)
     robot.base.translate_by(distance, v_m=1.0)
@@ -44,24 +56,43 @@ def move(robot, distance: float):
     print(f"waited for move by {distance}m command? {robot.wait_command(timeout=60.0)}")
 
 def rotate(robot, angle: float):
+    """Helper function to rotate the robot.
+
+    Args:
+        robot: the current ``stretch_body.robot.Robot`` instance.
+        angle: amount to rotate the robot by (in radians).
+    """
     robot.base.rotate_by(angle)
     robot.push_command()
     print(f"waited for move by {angle}m command? {robot.wait_command()}")
 
 def do_dw_pupd(robot, dw=True, put_down=False):
-    # deposit/withdraw values
-    DW_HEIGHT = 1.1
-    DW_LENGTH = 0.46
-    PUPD_DIST = 0.05
+    """Perform either a wafer deposit/withdraw or a pick-up/put-down.
+
+    Robot must be aligned with the manipulation point (e.g. RIE80 tray or wafer station).
+
+    Args:
+        robot: the current ``stretch_body.robot.Robot`` instance.
+        dw: deposit/withdraw flag-- select the target manipulation point; if ``True``,
+            then RIE80 tray is the target, else if ``False`` the wafer station is the target.
+        put_down: if ``True`` then robot will release the wafer (actuate the vacuum pen), else
+                  the robot will simply pick up the wafer (no actuation, just vertical movement).
+    """
+
+    # By default initialise offsets to RIE80 tray values (in meters).
+    DW_HEIGHT = 1.1 # lift height
+    DW_LENGTH = 0.46 # arm length
+    PUPD_DIST = 0.05 # vertical movement amount
 
     if not dw:
-        # pick up/put down values
+        # Wafer station pose.
         DW_HEIGHT = 0.98
         DW_LENGTH = 0.05
         PUPD_DIST = 0.11
 
     print(f"{DW_HEIGHT}, {DW_LENGTH}, {PUPD_DIST}")
 
+    # Move the lift and arm over the respective manipulation target.
     robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
     robot.end_of_arm.move_to('wrist_pitch', 0.0)
     robot.lift.move_to(DW_HEIGHT)
@@ -74,7 +105,8 @@ def do_dw_pupd(robot, dw=True, put_down=False):
     robot.arm.move_to(DW_LENGTH)
     robot.push_command()
     robot.wait_command()
-    
+
+    # Lower the lift to contact the wafer
     robot.lift.move_by(-PUPD_DIST, v_m=0.03)
     robot.push_command()
     robot.wait_command()
@@ -83,6 +115,7 @@ def do_dw_pupd(robot, dw=True, put_down=False):
         robot.end_of_arm.move_to('stretch_gripper', -70) # [-100, 100] => [fully closed, fully open]
         time.sleep(2.5)
 
+    # Raise arm, open gripper, and retract arm
     robot.lift.move_by(PUPD_DIST)
     robot.push_command()
     robot.wait_command()
@@ -98,6 +131,11 @@ def do_dw_pupd(robot, dw=True, put_down=False):
     robot.end_of_arm.move_to('wrist_yaw', math.pi/2)
 
 def debug_test(robot):   
+    """Helper function to debug specific parts of the routine.
+
+    Args:
+        robot: the current ``stretch_body.robot.Robot`` instance.
+    """
     button_op_test(robot) 
     # machine_op_debug(robot)
     # go_to_tray_debug(robot)
@@ -178,6 +216,12 @@ def button_op_test(robot):
 
 
 def main():
+    """Start the robot, run one demo iteration, and stop on exit.
+
+    The normal path performs the complete wafer-loading and unloading sequence.
+    Setting the local ``DEBUG`` flag selects the partial debug routine instead.
+    Robot shutdown is attempted in the ``finally`` block after the run.
+    """
     try:
         robot = rb.Robot()
         robot.startup()
@@ -195,6 +239,7 @@ def main():
 
             print(f'=== iteration: {i} ===\n\n')
 
+            # Phase 1: Align with the RIE80, open it, and operate its button.
             print('=== Aligning with Machine ===')
             base_alignment.run(robot)
 
@@ -216,6 +261,7 @@ def main():
 
             button_and_adjust.run(robot)
 
+            # Phase 2: Move to the wafer station and pick up the wafer.
             print('=== Going to Pick Up Wafer ===')
             move(robot, -FROM_MACHINE_TO_WTABLE)
             rotate(robot, QUARTER_CLOCK)
@@ -233,6 +279,7 @@ def main():
             print('=== Picking Up Wafer ===')
             do_dw_pupd(robot, False, False)
 
+            # Phase 3: Move to the RIE80 tray and deposit the wafer.
             print('=== Moving to Tray ===')
             station_navigation.run(robot, 'tray', horizontal_align=False)
 
@@ -244,6 +291,7 @@ def main():
             print('=== Depositing Wafer ===')
             do_dw_pupd(robot, True, True)
 
+            # Phase 4: Return to the controls and close the RIE80.
             print('=== Moving to Machine ===')
             move(robot, 0.9)
             rotate(robot, QUARTER_CLOCK)
@@ -269,11 +317,11 @@ def main():
             time.sleep(1.0)
 
             button_and_adjust.run(robot)
-
-            # HEILUHWUHF
             
+            # The current demo represents recipe execution with a fixed delay.
             time.sleep(5) # simulate waiting for recipe to run-- TODO: extend by having stretch dock and undock
 
+            # Phase 5: Reopen the RIE80 before retrieving the wafer.
             print('=== Aligning with Machine ===')
             base_alignment.run(robot)
 
@@ -295,6 +343,7 @@ def main():
 
             button_and_adjust.run(robot)
 
+            # Phase 6: Return to the tray and withdraw the wafer.
             print('=== Moving to Tray ===')
             move(robot, -FROM_TRAY_TO_MACHINE-0.5)
             rotate(robot, QUARTER_COUNTERCLOCK)
@@ -312,6 +361,7 @@ def main():
             print('=== Withdrawing Wafer ===')
             do_dw_pupd(robot, True, False)
 
+            # Phase 7: Return the wafer to the wafer station.
             print('=== Moving to Wafer Station ===')
             move(robot, 0.83)
             rotate(robot, QUARTER_CLOCK)
@@ -329,6 +379,7 @@ def main():
             print('=== Putting Down Wafer ===')
             do_dw_pupd(robot, False, True)
 
+            # Phase 8: Return to the RIE80 and leave it closed.
             print('=== Going to Machine ===')
             rotate(robot, QUARTER_COUNTERCLOCK)
             move(robot, 1.05)
