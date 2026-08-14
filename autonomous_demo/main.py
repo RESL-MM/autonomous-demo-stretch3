@@ -236,7 +236,7 @@ def main():
         DEBUG = False 
 
         if DEBUG:
-            debug_test(robot)
+            debug_test(robot, DEBUG_BUTTON, 1)
             return
         
         i = 0

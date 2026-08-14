@@ -3,7 +3,7 @@
 #### High Level Overview
 The aim of this project is to present a minimum viable demo that showcases the Stretch 3's autonomous operation in the microfabrication cleanroom as a basis for proposing further research into the use of autonomous mobile manipulators in a microfabrication cleanroom environment.
 
-The current scope of the project is producing a video that shows a complete and successful iteration of wafer etching process using the Oxford RIE80 etcher. A complete and successful single iteration comprises of the Stretch3 being able to open/close the RIE80, navigate between stations, and deposit/withdraw a wafer from a station and the machine. In theory, by showing a single, somewhat smart/autonomous approach to the problem, we have a basis to show that such operation could be extended to as many iterations as needed and for completely autonomous operation.
+The current scope of the project is producing a video that shows a complete and successful iteration of wafer etching process using the Oxford RIE80 etcher. A complete and successful single iteration comprises the Stretch3 being able to open/close the RIE80, navigate between stations, and deposit/withdraw a wafer from a station and the machine. In theory, by showing a single, somewhat smart/autonomous approach to the problem, we have a basis to show that such operation could be extended to as many iterations as needed and for completely autonomous operation.
 
 #### Current Approach
 We are currently working on the demo in a relatively fixed location and setup, i.e. the MCB cleanroom RIE80 area, and as such our approach to the problem is combining a series of fixed, coarse grained actions with fine grained error correction loops between fixed operation steps.
@@ -33,6 +33,12 @@ Gripper Mounted D405 Camera
 There are currently 5 key scripts used in the demo: `main.py`, `base_alignment.py`, `twist_and_adjust.py`, `button_and_adjust.py`, and `station_navigation.py`.
 
 ## `main.py`
+- `main.py` is the demo orchestration script that imports the other four scripts/subroutines as modules and sequences them into a complete demo script.
+- The demo sequence takes place in ``main()`` and uses defined helper functions for movement, rotation, and manipulation
+- Currently ``main()`` does the following:
+    - try to instantiate the Stretch3 robot object from the `stretch_body` package
+    - check if a debug flag has been set *in code* and if so run the `debug_test()` routine specified by the arguments
+    - if the debug flag is not set, then 
 
 ## `base_alignment.py`
 
@@ -41,5 +47,8 @@ There are currently 5 key scripts used in the demo: `main.py`, `base_alignment.p
 ## `button_and_adjust.py`
 
 ## `station_navigation.py`
+
+#### V1.0 Testing Build Trials and Results
+Located [here](https://docs.google.com/spreadsheets/d/1fxswzhHGRKX3I80u3gj_Lc9I5HO02BGpnYSGhEmqL74/edit?usp=sharing)
 
 #### Further Considerations and Future Changes
