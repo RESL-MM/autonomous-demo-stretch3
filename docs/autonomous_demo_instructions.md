@@ -6,7 +6,7 @@
 - When finished, make sure the robot is fully turned off and is securely plugged into the docking station and is charging (the charger should react and change from its previous state if it is plugged in properly)
 
 ### Pre-requisites/Dependencies
-- [XQuartz](https://www.xquartz.org/) (if controlling and SSHing into robot using MacOS)
+- [XQuartz](https://www.xquartz.org/) (if controlling and SSHing into the robot from macOS)
 - Qt (install using [these instructions](https://web.stanford.edu/dept/cs_edu/resources/qt/install-windows), the robot will throw an error if Qt is not installed properly on the machine SSHing into the Stretch3)
 
 ### Pre-Demo Setup
@@ -35,8 +35,8 @@
 		- If you want to do a full demo with the wafer actually being picked up and deposited, as opposed to simply seeing where the pen contacts the wafer and where it contacts the RIE80 tray (dry run), I suggest keeping the vacuum wand power cable on hand and only plugging it in (while still keeping the power cable out of the Stretch3's path) for the duration of the demo where the vacuum wand is used-- there is a high tripping and danger hazard present when the power cable is left loose as it most likely will get tangled and/or get caught in the wheels of the Stretch3
 	- Move the robot to an appropriate starting point for the demo (the robot should be facing toward the cleanroom entrance area, the arm should be roughly perpendicular to and extend towards the RIE80, and the robot should be placed a few feet behind and roughly in between the two localisation tags on the floor); **make sure all movements and adjustments are done when the robot is in runstop mode**
 - Misc. Environment Setup
-	- Ensure that no ArUco tag is occluded (in particular the two tags on the base, the two tags on the floor, and the tags on the tags on the RIE80)
-	- Clear a path from the machine to the table near the RIE80 and clear the side of the RIE80 (refer to [this video](https://drive.google.com/file/d/1YR1qLlcrEJYWG033WLnpk7WMhg7hJebS/view?usp=drive_link) for what that roughly looks like)-- the robot will pick up and deposit the wafer near the left corer of the desk
+		- Ensure that no ArUco tag is occluded (in particular the two tags on the base, the two tags on the floor, and the tags on the RIE80)
+		- Clear a path from the machine to the table near the RIE80 and clear the side of the RIE80 (refer to [this video](https://drive.google.com/file/d/1YR1qLlcrEJYWG033WLnpk7WMhg7hJebS/view?usp=drive_link) for what that roughly looks like)-- the robot will pick up and deposit the wafer near the left corner of the desk
 	- The demo assumes the RIE80 dial is in the closed position, **make sure it is in the closed position before the demo starts**
 	- **Do all the necessary setup for the RIE80 so it is able to be operated by the robot (i.e. log in and vent the machine so it can be opened and closed)**
 
@@ -49,7 +49,7 @@
 - Demo Running
 	- As it stands, the demo will run for 1 complete iteration and then the program will exit if all goes well
 	- Keep a close watch on the robot, if something goes wrong or looks like it is about to either immediately stop the program (ctrl + c in the process terminal) or press the runstop button THEN stop the program (the latter is easier)
-		- If something goes wrong there are two options: fully restart the robot or soft restart
+		- If something goes wrong, there are two options: fully restart the robot or soft restart
 		- fully restart:
 			- safer of the two options, less likely for any carry over errors, but means needing to power off and restart the robot (perform all steps from Pre-Demo onwards again)
 		- soft restart:

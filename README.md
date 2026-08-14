@@ -1,6 +1,6 @@
 # Stretch3 Autonomous Microfabrication Demo
 
-This repo consists of scripts and documentation needed for an autonomous mobile manipulator routine for use in a university microfabrication cleanroom environment.
+This repository contains the scripts and documentation needed for an autonomous mobile manipulator routine in a university microfabrication cleanroom environment.
 
 Specifically, it contains code for the Hello Robot Stretch3 to autonomously perform a wafer loading and unloading sequence for an Oxford RIE80 Etcher in which the robot aligns with and operates the machine and navigates between predefined stations (wafer table and RIE80).
 
@@ -8,7 +8,11 @@ The demo combines pre-defined coarse-grained movement in a fixed environment and
 
 ## Project Status
 
-The repo currently holds a minimum viable demo in the `autonomous_demo` directory for use in a fixed environment (The John O'Brien Nanofabrication Laboratory @ USC) and for operational testing/data collection.
+The repo currently holds a minimum viable demo in the `autonomous_demo` directory for use in a fixed environment (the John O'Brien Nanofabrication Laboratory @ USC) and for operational testing/data collection.
+
+## Scope And Assumptions
+
+This repository is intended as documentation and source for the specific cleanroom robot setup used by the project team. It is not designed as a general-purpose, clone-and-run demo for an outside environment, and the run instructions assume the Stretch3, cameras, markers, and RIE80 setup described in the accompanying docs.
 
 ## Project Documentation
 
@@ -69,6 +73,8 @@ autonomous-demo-stretch3/
 | `d435_helpers.py` | Configures and reads the head-mounted D435 camera |
 | `aruco_marker_info.yaml` | Defines marker dimensions and names |
 
+**More detailed information on the scripts can be found in the [Project overview](docs/project-report.md)**
+
 ## Hardware and Software
 
 ### Hardware
@@ -87,7 +93,7 @@ The demo heavily builds off and adapts code from the [Hello Robot Stretch3 repos
 ## Running the Demo
 Read the [operation instructions](docs/autonomous_demo_instructions.md)
 
-After all setup and preparations have been completed, then run the following from the repo when SSH'd into or directly using the Stretch3:
+After all setup and preparations have been completed, run the following from the repo when SSH'd into or directly using the Stretch3:
 ```bash
 cd autonomous_demo
 python3 main.py
