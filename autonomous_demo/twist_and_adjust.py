@@ -1,7 +1,17 @@
+"""Visually align the Stretch 3 gripper with and turn the RIE80 dial.
+
+The routine uses the wrist-mounted D405 camera to observe ArUco markers around
+the dial and on the gripper fingers. A reach phase reduces the estimated pose
+error; a lock phase then executes the fixed dial-engagement and rotation
+sequence for opening or closing the machine.
+
+This module commands physical hardware and assumes the robot has already been
+coarsely positioned near the RIE80 controls.
+"""
+
 import d405_helpers as dh
 import pyrealsense2 as rs
 import numpy as np
-import cv2
 import normalized_velocity_control as nvc
 import stretch_body.robot as rb
 import time
@@ -11,31 +21,9 @@ import yaml
 from yaml.loader import SafeLoader
 from scipy.spatial.transform import Rotation
 from hello_helpers import hello_misc as hm
-import argparse
 import loop_timer as lt
 from stretch_body import robot_params
 from stretch_body import hello_utils as hu
-
-def draw_origin(image, camera_info, origin_xyz, color):
-    radius = 6
-    thickness = -1
-    center = np.round(dh.pixel_from_3d(origin_xyz, camera_info)).astype(np.int32)
-    cv2.circle(image, center, radius, color, -1, lineType=cv2.LINE_AA)
-
-    
-def draw_text(image, origin, text_lines):
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_size = 0.5
-    location = origin + np.array([0, -55])
-    location = location.astype(np.int32)
-        
-    for i, line in enumerate(text_lines):
-        text_size = cv2.getTextSize(line, font, font_size, 4)
-        (text_width, text_height), text_baseline = text_size
-        center = int(text_width / 2)
-        offset = np.array([-center, i * (1.7*text_height)]).astype(np.int32)
-        cv2.putText(image, line, location + offset, font, font_size, (0, 0, 0), 4, cv2.LINE_AA)
-        cv2.putText(image, line, location + offset, font, font_size, (255, 255, 255), 1, cv2.LINE_AA)
 
 def get_dxl_joint_limits(joint):
     # method to get dynamixel joint limits in radians from robot params
@@ -56,6 +44,8 @@ def get_dxl_joint_limits(joint):
     
 ####################################
 # Miscellaneous Parameters
+MOP_OPEN = -1
+MOP_CLOSE = 1
 
 motion_on = True
 print_timing = True
@@ -118,7 +108,7 @@ joint_state_center = {
     'wrist_yaw_pos': 0.0,
     'wrist_pitch_pos': -0.4, #-0.6
     'wrist_roll_pos': 0.0,
-    'gripper_pos': 0
+    'gripper_pos': 25
 }
 
 ####################################
@@ -176,8 +166,17 @@ vel_cmd_to_pos = { v:k for (k,v) in pos_to_vel_cmd.items() }
 ####################################
 
 def recenter_robot(robot):
-    pan = np.pi/2.0
-    tilt = -np.pi/2.0
+    """Move the robot to a defined home position.
+
+    Args:
+        robot: a started ``stretch_body.robot.Robot`` instance.
+
+    Side effects:
+        Commands the head, arm, wrist, lift, and gripper, blocking after each
+        pose group.
+    """
+    pan = 0.0
+    tilt = 0.0
     robot.head.move_to('head_pan', pan)
     robot.head.move_to('head_tilt', tilt)
     robot.push_command()
@@ -201,16 +200,34 @@ def recenter_robot(robot):
     robot.push_command()
     robot.wait_command()
 
-    # robot.end_of_arm.get_joint('stretch_gripper').move_to(joint_state_center['gripper_pos'])
-    # robot.push_command()
-    # robot.wait_command()
-        
+    robot.end_of_arm.get_joint('stretch_gripper').move_to(joint_state_center['gripper_pos'])
+    robot.push_command()
+    robot.wait_command()
 
-def main(exposure, mop):
+def run(robot, exposure='low', op='close'):
+    """Approach and turn the RIE80 dial while correcting positional error.
+
+    The ``reach`` behavior estimates the dial target from its surrounding ArUco
+    markers and reduces the error between the target and gripper fingertips.
+    The ``lock`` behavior then rotates the wrist, extends the arm to engage the
+    dial, holds briefly, completes the turn, and restores the starting pose.
+
+    Args:
+        robot: a started ``stretch_body.robot.Robot`` instance positioned near
+            the RIE80 controls.
+        exposure: D405 exposure preset (``low``, ``medium``, or ``auto``) or a
+            supported numeric exposure value.
+        op: requested dial operation. ``close`` selects the closing direction;
+            every other value currently selects the opening direction.
+    """
+    controller = None
+    pipeline = None
+    mop = MOP_CLOSE
+
+    if op != 'close':
+        mop = MOP_OPEN
+
     try:
-        
-        robot = rb.Robot()
-        robot.startup()
         recenter_robot(robot)
         controller = nvc.NormalizedVelocityControl(robot)
         controller.reset_base_odometry()
@@ -243,6 +260,7 @@ def main(exposure, mop):
 
         fingertips = {}
         
+        # Process camera frames until the dial turn completes or times out.
         while True:
             loop_timer.start_of_iteration()
 
@@ -282,6 +300,8 @@ def main(exposure, mop):
             image = np.copy(color_image)
 
             if detect_aruco_button_on:                                                         
+                # Estimate the dial target from the surrounding markers and
+                # estimate fingertip poses from the finger tags.
                 aruco_detector.update(color_image, camera_info)                             
                 markers = aruco_detector.get_detected_marker_dict()                         
                 fingertips = aruco_to_fingertips.get_fingertips(markers)                    
@@ -303,23 +323,31 @@ def main(exposure, mop):
                 # TODO: test and adjust hardcoded offset values      
                 # # tag 6 is 3.5cm to the left of dial center, tag 5 is 4.5cm to right of dial center                         
                 if tag_6_pos is not None and tag_5_pos is not None:    
-                    if mop == 1:
+                    if mop == MOP_CLOSE:
                         toy_target = 0.67 * tag_6_pos + 0.33 * tag_5_pos
                     else:
-                        toy_target = 0.38 * tag_6_pos + 0.62 * tag_5_pos
+                        toy_target = 0.37 * tag_6_pos + 0.63 * tag_5_pos
                     t_frame = (tag_6_frame + tag_5_frame) / 2.0
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
                 elif tag_6_pos is not None:
-                    toy_target = tag_6_pos + np.array([0.035, 0, 0])
+                    default_offset = np.array([0.035, 0, 0])
+                    if mop == MOP_CLOSE:
+                        default_offset[0] + 0.05
+                    else:
+                        default_offset[0] - 0.05
+                    toy_target = tag_6_pos + default_offset
                     t_frame = tag_6_frame
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
                 elif tag_5_pos is not None:
-                    toy_target = tag_5_pos - np.array([0.045, 0, 0])
+                    default_offset = np.array([0.045, 0, 0])
+                    if mop == MOP_CLOSE:
+                        default_offset[0] - 0.05
+                    else:
+                        default_offset[0] + 0.05
+                    toy_target = tag_5_pos - default_offset 
                     t_frame = tag_5_frame
                     toy_target_frame = t_frame / np.linalg.norm(t_frame)
 
-
-            print()
 
             target_name = 'Dial Target (Tags 6 & 5)'
             if toy_target is None:
@@ -376,7 +404,6 @@ def main(exposure, mop):
 
             if (between_fingertips is not None) and (toy_target is not None):            
                 position_error = toy_target - between_fingertips
-                face_error = np.arctan2(toy_target_frame[0], toy_target_frame[2])
                 target_error = np.linalg.norm(position_error)
                 last_target_error = target_error  # Track for lock behavior
                 print('target_error = {:.2f} cm'.format(100.0 * target_error))
@@ -385,6 +412,8 @@ def main(exposure, mop):
             print('pre_reach =', pre_reach)
                         
             if behavior == 'reach':
+                # Visually servo until the dial is close enough for the fixed
+                # engagement and rotation sequence.
                 prev_behavior = behavior
 
                 if pre_reach:
@@ -414,16 +443,7 @@ def main(exposure, mop):
                 elif (between_fingertips is not None) and (toy_target is not None) and (target_error <= max_distance_for_attempted_reach):            
 
                     x_error, y_error, z_error = position_error
-                    rotation_error = face_error
                     roll = joint_state['wrist_roll_pos']
-                    c = np.cos(roll)
-                    s = np.sin(roll)
-                    print(f"old rotation: {rotation_error}")
-
-                    normal = toy_target_frame
-                    normal_fixed = np.array([c * normal[0] + s * normal[1], -s * normal[0] + c * normal[1], normal[2]])
-                    x_fixed = c * x_error + s * y_error
-                    rotation_error = -np.arctan2(-normal_fixed[0],-normal_fixed[2])
 
                     # Keep wrist yaw stable at 0 degrees instead of servoing
                     yaw_velocity = 0.0 - joint_state['wrist_yaw_pos']
@@ -439,6 +459,7 @@ def main(exposure, mop):
                     yaw = joint_state['wrist_yaw_pos']
                     pitch = -joint_state['wrist_pitch_pos']
                     roll = -joint_state['wrist_roll_pos']
+
                     r = Rotation.from_euler('yxz', [yaw, pitch, roll]).as_matrix()
                     rotated_lift = np.matmul(r, np.array([0.0, -1.0, 0.0]))
                     rotated_arm = np.matmul(r, np.array([0.0, 0.0, 1.0]))
@@ -447,22 +468,12 @@ def main(exposure, mop):
                     lift_velocity = np.dot(rotated_lift, position_error)
                     arm_velocity = np.dot(rotated_arm, position_error)
 
-                    k_face = 1.0
                     k_base = 5.0
-                    max_rotation = 0.25
-                    rotation_tolerance = 0.001 # radians
-                    alignment_tolerance = 0.005 # meters
+                    alignment_tolerance = 0.002 # meters
 
-                    base_rotational_vel = np.clip(-k_face * rotation_error, -max_rotation, max_rotation)
                     base_movement = np.clip(-k_base * x_error, -2.0, 2.0)
 
                     cmd = zero_vel.copy()
-
-                    #base_rotational_velocity = np.dot(rotated_base, position_error) / (joint_state['arm_pos'] + max_gripper_length)
-                    base_rotational_velocity = np.dot(rotated_base, position_error)
-                    #print('base_rotational_velocity =', base_rotational_velocity)
-                    if abs(base_rotational_velocity) < min_base_speed:
-                        base_rotational_velocity = 0.0
 
                     #print('base_rotational_velocity =', base_rotational_velocity)
                     #print('base_odom_theta =', joint_state['base_odom_theta'])
@@ -476,7 +487,6 @@ def main(exposure, mop):
                         'wrist_yaw_counterclockwise' : yaw_velocity,
                         'wrist_pitch_up' : pitch_velocity,
                         'wrist_roll_counterclockwise' : roll_velocity,
-                        'base_counterclockwise' : base_rotational_velocity
                     }
 
                     if target_error < grasp_if_error_below_this:
@@ -492,18 +502,11 @@ def main(exposure, mop):
                         cmd = {k: joint_visual_servoing_velocity_scale[k] * v for (k,v) in cmd.items()}
 
                         if motion_on:
-                            print(rotation_error)
-                            print(x_error)
-                            print(x_fixed)        
-                            if (abs(rotation_error) > rotation_tolerance):
-                                cmd['base_counterclockwise'] = -base_rotational_vel
-                                print('Aligning with Station')
-                            if (abs(x_fixed) > alignment_tolerance):
+                            if (abs(x_error) > alignment_tolerance):
                                 cmd['base_forward'] = base_movement
                                 print('Horizontally Aligning with Station')
 
-                            if not ((abs(rotation_error) > rotation_tolerance) or (abs(x_fixed) > alignment_tolerance)):
-                            #if not (abs(x_fixed) > alignment_tolerance):
+                            if not (abs(x_error) > alignment_tolerance):
                                 cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                                 cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
 
@@ -537,6 +540,8 @@ def main(exposure, mop):
                         controller.set_command(cmd)
 
             elif behavior == 'lock':
+                # Execute the wrist rotation, arm extension, hold, return
+                # rotation, and pose-restoration phases.
                 # Lock behavior: rotate CCW 50°, extend arm, hold 5s, rotate CW 100°, restore
                 if prev_behavior != 'lock':
                     lock_state_count = 0
@@ -563,7 +568,7 @@ def main(exposure, mop):
                 pitch_hold_vel = lock_target_pitch - joint_state['wrist_pitch_pos']
                 
                 if lock_phase == 'rotating_ccw':
-                    target_roll = -0.785 * mop  # -45 degrees
+                    target_roll = -0.8 * mop  # -45 degrees
                     roll_error = target_roll - joint_state['wrist_roll_pos']
                     
                     if abs(roll_error) < 0.05:
@@ -578,6 +583,10 @@ def main(exposure, mop):
                         cmd = zero_vel.copy()
                         cmd['wrist_roll_counterclockwise'] = np.clip(roll_error * lock_roll_gain, -lock_roll_max_vel, lock_roll_max_vel)
                         cmd['wrist_pitch_up'] = pitch_hold_vel
+                        if joint_state['gripper_pos'] >= (0.3 * max_joint_state['gripper_pos']):
+                                cmd['gripper_open'] = -gripper_open_speed
+                        else:
+                            cmd['gripper_open'] = 0.0
                         
                         if motion_on:
                             cmd = { k: ( 0.0 if ((v < 0.0) and (joint_state[vel_cmd_to_pos[k]] < min_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
@@ -627,6 +636,7 @@ def main(exposure, mop):
                 
                 elif lock_phase == 'rotating_cw':
                     target_roll = 0.950 * mop  # +45 degrees
+                    
                     roll_error = target_roll - joint_state['wrist_roll_pos']
                     
                     if abs(roll_error) < 0.1:
@@ -666,24 +676,6 @@ def main(exposure, mop):
                     break
 
                 lock_state_count = lock_state_count + 1
-
-            if toy_target is not None:
-                # draw blue circle for the button target position
-                draw_origin(image, camera_info, toy_target, (255, 0, 0))
-                x,y,z = toy_target * 100.0
-                width = target_width_m
-                text_lines = [
-                    "{:.1f} cm wide".format(width*100.0),
-                    "{:.1f}, {:.1f}, {:.1f} cm".format(x,y,z)
-                    ]
-                
-                center = np.round(dh.pixel_from_3d(toy_target, camera_info)).astype(np.int32)
-                draw_text(image, center, text_lines)
-
-            if between_fingertips is not None: 
-                # draw white circle for point between fingertip
-                draw_origin(image, camera_info, between_fingertips, (255, 255, 255))
-
             
             aruco_to_fingertips.draw_fingertip_frames(fingertips,
                                                       image,
@@ -692,41 +684,8 @@ def main(exposure, mop):
                                                       draw_origins=True,
                                                       write_coordinates=True)
             
-
-            
-            cv2.imshow('Features Used for Visual Servoing', image)
-            cv2.waitKey(1)
-
-            loop_timer.end_of_iteration()
-            if print_timing: 
-                loop_timer.pretty_print(minimum=True)
     finally:
-        controller.stop()
-        robot.stop()
-        pipeline.stop()
-
-
-
-
-if __name__ == '__main__':
-
-    
-    parser = argparse.ArgumentParser(
-        prog='Stretch 3 Dial Twisting Demo',
-        description='This application demonstrates dial twisting using visual servoing with ArUco markers (tags 23 & 24) and the gripper-mounted D405.',
-    )
-    parser.add_argument('-e', '--exposure', action='store', type=str, default='low', help=f'Set the D405 exposure to {dh.exposure_keywords} or an integer in the range {dh.exposure_range}') 
-    parser.add_argument('--mop', type=str, choices=['open', 'close'], default='close', help='open or close the machine' )
-    
-    args = parser.parse_args()
-    exposure = args.exposure
-    mop = 1
-    if args.mop == 'open':
-        mop = -1
-
-    print(mop)
-
-    if not dh.exposure_argument_is_valid(exposure):
-        raise argparse.ArgumentTypeError(f'The provided exposure setting, {exposure}, is not a valide keyword, {dh.exposure_keywords}, or is outside of the allowed numeric range, {dh.exposure_range}.')    
-    
-    main(exposure, mop)
+        if controller is not None:
+            controller.stop()
+        if pipeline is not None:
+            pipeline.stop()

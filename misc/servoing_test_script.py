@@ -11,8 +11,8 @@ import hello_helpers.hello_misc as hm
 from microfab_actions.action import MoveTo
 from microfab_actions.action import PerformTask
 from microfab_actions.action import TagSearch
-from tag_search_helper import TagHelper
-from gripper_cam_helper import GripperCamHelper
+from misc.tag_search_helper import TagHelper
+from misc.gripper_cam_helper import GripperCamHelper
 import numpy as np
 import time
 import yaml

@@ -1,7 +1,16 @@
+"""Visually approach or laterally align with a tagged work station.
+
+The routine uses the head-mounted D435 camera to locate an ArUco marker for the
+wafer station or RIE80 tray. It can either reduce depth error while approaching
+a station or reduce horizontal error after the robot has turned beside it.
+
+This module commands physical hardware and assumes marker names and dimensions
+match ``aruco_marker_info.yaml``.
+"""
+
 import d435_helpers as dh
 import pyrealsense2 as rs
 import numpy as np
-import cv2
 import normalized_velocity_control as nvc
 import stretch_body.robot as rb
 import aruco_detector as ad
@@ -103,19 +112,19 @@ joint_state_center = {
 min_joint_state = {
     'base_odom_theta' : -0.8,
     'lift_pos': 0.1,
-    'arm_pos': 0.01, #0.03
-    'wrist_yaw_pos': -0.20, #-0.25
+    'arm_pos': 0.01,
+    'wrist_yaw_pos': -0.20,
     'wrist_pitch_pos': -1.2,
     'wrist_roll_pos': -1.6,  # Allow larger range for dial twisting
-    'gripper_pos' : .0 #3.5 #4.0 #3.0 
+    'gripper_pos' : 0.0
     }
 
 max_joint_state = {
     'base_odom_theta' : 0.8,
-    'lift_pos': 1.05, #
+    'lift_pos': 1.05,
     'arm_pos': 0.45,
-    'wrist_yaw_pos': 1.0, #0.5
-    'wrist_pitch_pos': 0.2, #-0.4
+    'wrist_yaw_pos': 1.0,
+    'wrist_pitch_pos': 0.2,
     'wrist_roll_pos': 1.6,  # Allow larger range for dial twisting
     'gripper_pos': get_dxl_joint_limits('stretch_gripper')[1] #10.46
     }
@@ -183,6 +192,15 @@ def recenter_robot(robot):
         
 
 def run(robot, tag_name, exposure='low', horizontal_align=True):
+    """Approach or horizontally align with a named station marker.
+
+    Args:
+        robot: a started ``stretch_body.robot.Robot`` instance.
+        tag_name: marker name from ``aruco_marker_info.yaml``
+        exposure: D435 exposure preset (``low``, ``medium``, or ``auto``)
+        horizontal_align: when ``True``, robot will laterally align with
+         specified tag_name; when ``False``, move forward towards the tag.
+    """
     controller = None
     pipeline = None
 
@@ -190,11 +208,12 @@ def run(robot, tag_name, exposure='low', horizontal_align=True):
         recenter_robot(robot)
         controller = nvc.NormalizedVelocityControl(robot)
         controller.reset_base_odometry()
-        
+
+        # set head-nav camera positon based on alignment goal
         if horizontal_align:
-            robot.head.move_to('head_pan', -np.pi/2)
+            robot.head.move_to('head_pan', -np.pi/2) # face perpendicular to forward motion
         else:
-            robot.head.move_to('head_pan', 0.0)
+            robot.head.move_to('head_pan', 0.0) # face forward
         robot.head.move_to('head_tilt', 0.0)
 
         marker_info = {}
@@ -203,18 +222,11 @@ def run(robot, tag_name, exposure='low', horizontal_align=True):
 
         detect_aruco_button_on = True
         aruco_detector = ad.ArucoDetector(marker_info=marker_info, show_debug_images=True, use_apriltag_refinement=False, brighten_images=True)
-        # aruco_to_fingertips = af.ArucoToFingertips(default_height_above_mounting_surface=af.suctioncup_height['cup_bottom'])
 
         first_frame = True
 
         behavior = 'reach'
-        prev_behavior = 'reach'
         pre_reach = True
-        last_target_error = None  # Track the last known target error before detection was lost
-
-        # Assume that the gripper starts out fully opened
-        distance_between_fingertips = distance_between_fully_open_fingertips
-        prev_distance_between_fingertips = distance_between_fully_open_fingertips
 
         pipeline, profile = dh.start_d435(exposure)
 
@@ -222,19 +234,13 @@ def run(robot, tag_name, exposure='low', horizontal_align=True):
         # frames_since_fingers_detected = 0
             
         loop_timer = lt.LoopTimer()
-
-        fingertips = {}
         
+        # Process camera frames until the active alignment tolerances are met.
         while True:
             loop_timer.start_of_iteration()
 
             wafer_station = None
             wafer_station_normal = None
-
-            # fingertip_left_pos = None       
-            # fingertip_right_pos = None
-            # between_fingertips = None
-            # distance_between_fingertips = None
             
             frames = pipeline.wait_for_frames()
             depth_frame = frames.get_depth_frame()
@@ -260,14 +266,11 @@ def run(robot, tag_name, exposure='low', horizontal_align=True):
 
                 first_frame = False
                 
-            depth_image = np.asanyarray(depth_frame.get_data())
             color_image = np.asanyarray(color_frame.get_data())
-            image = np.copy(color_image)
 
             if detect_aruco_button_on:                                                         
                 aruco_detector.update(color_image, camera_info)                             
                 markers = aruco_detector.get_detected_marker_dict()                         
-                # fingertips = aruco_to_fingertips.get_fingertips(markers)                    
                                                                                             
                 wafer_station_pos = None   
                 wafer_station_norm = None                                       
@@ -312,11 +315,9 @@ def run(robot, tag_name, exposure='low', horizontal_align=True):
 
             print('behavior =', behavior)
             print('pre_reach =', pre_reach)
-                        
-            # if behavior == 'reach':
-            prev_behavior = behavior
 
             if pre_reach:
+                # Prepare the gripper before commanding station alignment.
                 cmd = {}
 
                 gripper_ready = False
@@ -340,8 +341,9 @@ def run(robot, tag_name, exposure='low', horizontal_align=True):
                     cmd = { k: ( 0.0 if ((v > 0.0) and (joint_state[vel_cmd_to_pos[k]] > max_joint_state[vel_cmd_to_pos[k]])) else v ) for (k,v) in cmd.items()}
                     controller.set_command(cmd)
 
-            # elif (between_fingertips is not None) and (toy_target is not None) and (target_error <= max_distance_for_attempted_reach): 
             elif wafer_station is not None:           
+                # Compute orientation correction together with either lateral
+                # or depth motion according to ``horizontal_align``.
                 x_error, y_error, z_error = position_error
 
                 print(position_error)

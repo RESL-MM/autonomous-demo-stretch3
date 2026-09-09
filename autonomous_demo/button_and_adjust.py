@@ -1,3 +1,13 @@
+"""Visually align the Stretch 3 gripper with and press the RIE80 button.
+
+The routine uses the wrist-mounted D405 camera to observe ArUco markers around
+the button and on the gripper fingers. A reach phase reduces the estimated pose
+error; a lock phase then performs the fixed button-press and retraction motion.
+
+This module commands physical hardware and assumes the robot has already been
+coarsely positioned near the RIE80 controls.
+"""
+
 import d405_helpers as dh
 import pyrealsense2 as rs
 import numpy as np
@@ -152,6 +162,11 @@ vel_cmd_to_pos = { v:k for (k,v) in pos_to_vel_cmd.items() }
 ####################################
 
 def recenter_robot(robot):
+    """Move the robot to a defined home position.
+
+    Args:
+        robot: a started ``stretch_body.robot.Robot`` instance.
+    """
     pan = 0.0
     tilt = 0.0
     robot.head.move_to('head_pan', pan)
@@ -182,6 +197,13 @@ def recenter_robot(robot):
         
 
 def run(robot, exposure='low'):
+    """Approach and press the button on the RIE80 while correcting positional error
+
+    Args:
+        robot: a started ``stretch_body.robot.Robot`` instance positioned near
+            the RIE80 controls.
+        exposure: D405 exposure preset (``low``, ``medium``, or ``auto``)
+    """
     controller = None
     pipeline = None
 
@@ -218,6 +240,7 @@ def run(robot, exposure='low'):
 
         fingertips = {}
         
+        # Process camera frames until the button press completes or times out.
         while True:
             loop_timer.start_of_iteration()
 
@@ -297,9 +320,7 @@ def run(robot, exposure='low'):
                 print(target_name + ' Detection: FAILED')
             else:
                 print(target_name + ' Detection: SUCCEEDED')
- 
-            fingertip_left_pose = None
-            fingertip_right_pose = None
+
             f = fingertips.get('left', None)
             if f is not None:
                 fingertip_left_pos = f['pos']
@@ -356,6 +377,8 @@ def run(robot, exposure='low'):
             print('pre_reach =', pre_reach)
                         
             if behavior == 'reach':
+                # Visually servo until the target is close enough to hand over
+                # to the deterministic button-press sequence.
                 prev_behavior = behavior
 
                 if pre_reach:
@@ -429,7 +452,6 @@ def run(robot, exposure='low'):
 
                     cmd = zero_vel.copy()
 
-                    #base_rotational_velocity = np.dot(rotated_base, position_error) / (joint_state['arm_pos'] + max_gripper_length)
                     base_rotational_velocity = np.dot(rotated_base, position_error)
                     #print('base_rotational_velocity =', base_rotational_velocity)
                     if abs(base_rotational_velocity) < min_base_speed:
@@ -509,6 +531,8 @@ def run(robot, exposure='low'):
                         controller.set_command(cmd)
 
             elif behavior == 'lock':
+                # Execute the frame-counted wait, press, hold, and retract
+                # phases after visual alignment has finished.
                 # Lock behavior: wait 0.5s, extend arm to press, hold, then retract
                 if prev_behavior != 'lock':
                     lock_state_count = 0
