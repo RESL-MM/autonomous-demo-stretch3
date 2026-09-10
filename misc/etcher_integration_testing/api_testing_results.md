@@ -4,7 +4,9 @@
 - 80: Open (no output in audit)
 - 81: Close
 - 82: Pump
-- 83-84: Recipe Start and End
+- 83-84: Recipe Start and User Logout
+
+> Since user logged outbefore recipe was done, it seems recipe end was not tracked?
 
 ### Output
 
