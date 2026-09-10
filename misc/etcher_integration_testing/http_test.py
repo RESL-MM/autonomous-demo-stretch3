@@ -25,7 +25,7 @@ def send_req(endpoint):
     print(f"making request: {url}")
 
     try:
-        response = request.get(url, auth=(USERNAME, PASSWORD), timeout=10) # TODO: timeout matter?
+        response = requests.get(url, auth=(USERNAME, PASSWORD), timeout=10) # TODO: timeout matter?
         print(f"status code: {response.status_code}")
 
         response.raise_for_status()
@@ -45,5 +45,8 @@ def send_req(endpoint):
         print(e)
         return None
     
-send_req("/Jobs")
-# send_req("/Jobs/&Maximum=5")
+# send_req("/Jobs")
+# send_req("/Jobs/&Maximum=20")
+# print('\n')
+send_req("/AuditLog")
+# print('\n')
